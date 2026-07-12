@@ -35,5 +35,12 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    build: {
+      // Strip all console.* calls from the production bundle
+      minify: "esbuild",
+    },
+    esbuild: {
+      drop: mode === "production" ? ["console", "debugger"] : [],
+    },
   };
 });
