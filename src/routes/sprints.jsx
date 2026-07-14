@@ -1,6 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Layers, Plus, Search, Edit2, Trash2, Loader2, Calendar, Filter } from "lucide-react";
+import { Layers, Plus, Search, Edit2, Trash2, Loader2, Calendar, Filter, Eye } from "lucide-react";
 import { useSession } from "@/lib/session";
 import { sprintService, projectService } from "@/services/api-services";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ConfirmationDialog } from "@/components/shared/confirmation-dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
 export const Route = createFileRoute("/sprints")({
   head: () => ({
@@ -43,11 +50,20 @@ function SprintsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ACTIVE");
   const [projectFilter, setProjectFilter] = useState("ALL");
+  const [page, setPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [stats, setStats] = useState({ total: 0, active: 0, planned: 0, completed: 0 });
 
-  // Dialog state
+  // Dialog & Drawer state
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingSprint, setEditingSprint] = useState(null);
   const [formLoading, setFormLoading] = useState(false);
+  const [viewSprint, setViewSprint] = useState(null);
+
+  // Delete state
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [sprintToDelete, setSprintToDelete] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Form fields
   const [name, setName] = useState("");
@@ -57,7 +73,7 @@ function SprintsPage() {
   const [projectId, setProjectId] = useState("");
   const [status, setStatus] = useState("PLANNED");
 
-  const canEdit = currentUser.role === "admin" || currentUser.role === "pm";
+  const canEdit = currentUser?.role === "admin" || currentUser?.role === "pm";
 
   const fetchData = async () => {
     setLoading(true);
@@ -67,12 +83,22 @@ function SprintsPage() {
           search: search || undefined,
           status: statusFilter !== "ALL" ? statusFilter : undefined,
           projectId: projectFilter !== "ALL" ? projectFilter : undefined,
-          size: 100,
+          page,
+          size: 10,
         }),
         projectService.search({ size: 100 }),
       ]);
       setSprints(sprintsRes.content || []);
       setProjects(projRes.content || []);
+      setTotalPages(sprintsRes.totalPages || 0);
+      try {
+        const statsData = await sprintService.getStats({
+          projectId: projectFilter !== "ALL" ? projectFilter : undefined,
+        });
+        setStats(statsData);
+      } catch (err) {
+        console.error("Failed to load sprint stats", err);
+      }
     } catch (err) {
       toast.error(err.message || "Failed to load sprints data");
     } finally {
@@ -82,7 +108,7 @@ function SprintsPage() {
 
   useEffect(() => {
     fetchData();
-  }, [search, statusFilter, projectFilter]);
+  }, [search, statusFilter, projectFilter, page]);
 
   const handleOpenCreate = () => {
     setEditingSprint(null);
@@ -135,14 +161,24 @@ function SprintsPage() {
     }
   };
 
-  const handleDelete = async (sprintId) => {
-    if (!window.confirm("Are you sure you want to delete this sprint?")) return;
+  const confirmDelete = (sprint) => {
+    setSprintToDelete(sprint);
+    setDeleteOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!sprintToDelete) return;
+    setDeleteLoading(true);
     try {
-      await sprintService.delete(sprintId);
+      await sprintService.delete(sprintToDelete.id);
       toast.success("Sprint deleted successfully");
+      setDeleteOpen(false);
+      setSprintToDelete(null);
       fetchData();
     } catch (err) {
       toast.error(err.message || "Failed to delete sprint");
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -166,6 +202,32 @@ function SprintsPage() {
           </Button>
         )}
       </header>
+
+      {/* KPI Stats Panel */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="rounded-xl border hairline bg-card p-4">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Active Sprints</div>
+          <div className="text-2xl font-bold mt-1 text-success font-display">
+            {stats.active}
+          </div>
+        </div>
+        <div className="rounded-xl border hairline bg-card p-4">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Planned</div>
+          <div className="text-2xl font-bold mt-1 text-primary font-display">
+            {stats.planned}
+          </div>
+        </div>
+        <div className="rounded-xl border hairline bg-card p-4">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Completed</div>
+          <div className="text-2xl font-bold mt-1 text-muted-foreground font-display">
+            {stats.completed}
+          </div>
+        </div>
+        <div className="rounded-xl border hairline bg-card p-4">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Portfolio</div>
+          <div className="text-2xl font-bold mt-1 font-display">{stats.total}</div>
+        </div>
+      </div>
 
       {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap">
@@ -225,7 +287,12 @@ function SprintsPage() {
                 <div>
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <h3 className="font-display text-lg font-muted">{s.name}</h3>
+                      <h3
+                        className="font-display text-lg font-semibold cursor-pointer hover:text-primary transition-colors"
+                        onClick={() => setViewSprint(s)}
+                      >
+                        {s.name}
+                      </h3>
                       <p className="text-xs text-muted-foreground mt-0.5 font-mono">
                         {projectName}
                       </p>
@@ -261,29 +328,73 @@ function SprintsPage() {
                   </div>
                 </div>
 
-                {canEdit && (
-                  <div className="pt-3 border-t hairline flex justify-end gap-2">
+                <div className="pt-3 border-t hairline flex justify-end gap-1.5">
+                  <Link to="/tasks" search={{ sprintId: s.id, projectId: s.projectId }}>
                     <Button
-                      variant="ghost"
+                      variant="default"
                       size="sm"
-                      className="h-8"
-                      onClick={() => handleOpenEdit(s)}
+                      className="h-8 px-2 text-xs"
                     >
-                      <Edit2 className="size-3.5 mr-1" /> Edit
+                      Sprint Board
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => handleDelete(s.id)}
-                    >
-                      <Trash2 className="size-3.5 mr-1" /> Delete
-                    </Button>
-                  </div>
-                )}
+                  </Link>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2"
+                    onClick={() => setViewSprint(s)}
+                  >
+                    <Eye className="size-3.5 mr-1" /> View
+                  </Button>
+                  {canEdit && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2"
+                        onClick={() => handleOpenEdit(s)}
+                      >
+                        <Edit2 className="size-3.5 mr-1" /> Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => confirmDelete(s)}
+                      >
+                        <Trash2 className="size-3.5 mr-1" /> Delete
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex justify-end gap-2 text-xs">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            disabled={page === 0}
+          >
+            Previous
+          </Button>
+          <span className="py-1.5 px-3 border border-input rounded-md bg-card">
+            Page {page + 1} of {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+            disabled={page === totalPages - 1}
+          >
+            Next
+          </Button>
         </div>
       )}
 
@@ -398,6 +509,78 @@ function SprintsPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Details Drawer / Sheet */}
+      <Sheet open={viewSprint !== null} onOpenChange={(open) => !open && setViewSprint(null)}>
+        <SheetContent className="bg-card border-l hairline sm:max-w-md">
+          <SheetHeader className="pb-4 border-b hairline">
+            <SheetTitle className="font-display text-xl">Sprint Details</SheetTitle>
+          </SheetHeader>
+          {viewSprint && (
+            <div className="mt-6 space-y-6 text-sm">
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">Sprint Name</span>
+                <div className="font-semibold text-lg text-foreground">{viewSprint.name}</div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">Associated Project</span>
+                <div className="font-medium text-foreground">
+                  {projects.find((p) => p.id === viewSprint.projectId)?.name || "Unknown"}
+                </div>
+              </div>
+
+              {viewSprint.goal && (
+                <div className="space-y-1">
+                  <span className="text-xs text-muted-foreground uppercase tracking-wider">Goal / Scope</span>
+                  <div className="text-muted-foreground leading-relaxed">{viewSprint.goal}</div>
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">Dates</span>
+                <div className="flex flex-col gap-1">
+                  <div>Starts: {fmtDate(viewSprint.startDate)}</div>
+                  <div>Ends: {fmtDate(viewSprint.endDate)}</div>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">Status</span>
+                <div>
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                      viewSprint.status === "ACTIVE"
+                        ? "bg-success/10 text-success"
+                        : viewSprint.status === "COMPLETED"
+                        ? "bg-muted text-muted-foreground"
+                        : "bg-primary-soft text-primary"
+                    }`}
+                  >
+                    {viewSprint.status}
+                  </span>
+                </div>
+              </div>
+
+              <div className="border-t hairline pt-4 text-xs text-muted-foreground space-y-1">
+                <div>Created At: {fmtDate(viewSprint.createdAt)}</div>
+                {viewSprint.updatedAt && <div>Updated At: {fmtDate(viewSprint.updatedAt)}</div>}
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Delete Confirmation */}
+      <ConfirmationDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Delete Sprint"
+        description={`Are you sure you want to delete ${sprintToDelete?.name}? This will remove it from project planning.`}
+        confirmLabel="Delete"
+        loading={deleteLoading}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

@@ -83,8 +83,11 @@ export const Route = createRootRouteWithContext()({
   errorComponent: ErrorComponent,
 });
 
+import { ShieldAlert, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
 function AppFrame() {
-  const { user } = useSession();
+  const { user, logout } = useSession();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
@@ -102,6 +105,59 @@ function AppFrame() {
 
   if (!user && !isPublicRoute) {
     return null;
+  }
+
+  // Handle pending or suspended account states
+  if (user && user.status === "PENDING_APPROVAL") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <div className="max-w-md w-full text-center space-y-6 p-8 border border-border/40 bg-card rounded-2xl">
+          <div className="size-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto">
+            <Loader2 className="size-8 animate-spin" />
+          </div>
+          <h1 className="font-display text-3xl">Pending Approval</h1>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Your account registration has been submitted successfully. 
+            An administrator must approve your profile before you can access the system.
+          </p>
+          <div className="pt-4 border-t border-border/30">
+            <Button
+              onClick={logout}
+              variant="outline"
+              className="w-full"
+            >
+              Sign out
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (user && (user.status === "SUSPENDED" || user.status === "INACTIVE")) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <div className="max-w-md w-full text-center space-y-6 p-8 border border-destructive/20 bg-card rounded-2xl">
+          <div className="size-16 rounded-2xl bg-destructive/10 text-destructive flex items-center justify-center mx-auto">
+            <ShieldAlert className="size-8" />
+          </div>
+          <h1 className="font-display text-3xl text-destructive">Account Suspended</h1>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Your account has been suspended by the platform administrator. 
+            Please contact your administrator for more information.
+          </p>
+          <div className="pt-4 border-t border-border/30">
+            <Button
+              onClick={logout}
+              variant="outline"
+              className="w-full"
+            >
+              Sign out
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // Unauthenticated users (viewing /, /login, or /register) do not get the sidebar frame

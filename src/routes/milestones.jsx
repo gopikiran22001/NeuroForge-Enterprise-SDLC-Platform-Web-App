@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Flag, Plus, Search, Edit2, Trash2, Loader2, Calendar, Filter } from "lucide-react";
+import { Flag, Plus, Search, Edit2, Trash2, Loader2, Calendar, Filter, Eye, AlertTriangle } from "lucide-react";
 import { useSession } from "@/lib/session";
 import { milestoneService, projectService } from "@/services/api-services";
 import { Button } from "@/components/ui/button";
@@ -22,15 +22,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ConfirmationDialog } from "@/components/shared/confirmation-dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/milestones")({
   head: () => ({
     meta: [
       { title: "Milestones · NeuroForge Nexus" },
-      {
-        name: "description",
-        content: "Key delivery milestones across the SDLC portfolio.",
-      },
+      { name: "description", content: "Key delivery milestones across the SDLC portfolio." },
     ],
   }),
   component: MilestonesPage,
@@ -46,11 +51,20 @@ function MilestonesPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("IN_PROGRESS");
   const [projectFilter, setProjectFilter] = useState("ALL");
+  const [page, setPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [stats, setStats] = useState({ total: 0, inProgress: 0, completed: 0, overdue: 0 });
 
-  // Dialog state
+  // Dialog & Drawer state
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingMilestone, setEditingMilestone] = useState(null);
   const [formLoading, setFormLoading] = useState(false);
+  const [viewMilestone, setViewMilestone] = useState(null);
+
+  // Delete state
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [milestoneToDelete, setMilestoneToDelete] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Form fields
   const [name, setName] = useState("");
@@ -59,7 +73,7 @@ function MilestonesPage() {
   const [projectId, setProjectId] = useState("");
   const [status, setStatus] = useState("PLANNED");
 
-  const canEdit = currentUser.role === "admin" || currentUser.role === "pm";
+  const canEdit = currentUser?.role === "admin" || currentUser?.role === "pm";
 
   const fetchData = async () => {
     setLoading(true);
@@ -69,12 +83,22 @@ function MilestonesPage() {
           search: search || undefined,
           status: statusFilter !== "ALL" ? statusFilter : undefined,
           projectId: projectFilter !== "ALL" ? projectFilter : undefined,
-          size: 100,
+          page,
+          size: 10,
         }),
         projectService.search({ size: 100 }),
       ]);
       setMilestones(msRes.content || []);
       setProjects(projRes.content || []);
+      setTotalPages(msRes.totalPages || 0);
+      try {
+        const statsData = await milestoneService.getStats({
+          projectId: projectFilter !== "ALL" ? projectFilter : undefined,
+        });
+        setStats(statsData);
+      } catch (err) {
+        console.error("Failed to load milestone stats", err);
+      }
     } catch (err) {
       toast.error(err.message || "Failed to load milestones data");
     } finally {
@@ -84,7 +108,7 @@ function MilestonesPage() {
 
   useEffect(() => {
     fetchData();
-  }, [search, statusFilter, projectFilter]);
+  }, [search, statusFilter, projectFilter, page]);
 
   const handleOpenCreate = () => {
     setEditingMilestone(null);
@@ -134,14 +158,24 @@ function MilestonesPage() {
     }
   };
 
-  const handleDelete = async (milestoneId) => {
-    if (!window.confirm("Are you sure you want to delete this milestone?")) return;
+  const confirmDelete = (milestone) => {
+    setMilestoneToDelete(milestone);
+    setDeleteOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!milestoneToDelete) return;
+    setDeleteLoading(true);
     try {
-      await milestoneService.delete(milestoneId);
+      await milestoneService.delete(milestoneToDelete.id);
       toast.success("Milestone deleted successfully");
+      setDeleteOpen(false);
+      setMilestoneToDelete(null);
       fetchData();
     } catch (err) {
       toast.error(err.message || "Failed to delete milestone");
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -153,6 +187,11 @@ function MilestonesPage() {
       case "CANCELLED": return "bg-destructive/10 text-destructive";
       default: return "bg-muted text-muted-foreground";
     }
+  };
+
+  const isOverdue = (dateString, st) => {
+    if (st === "COMPLETED" || st === "CANCELLED") return false;
+    return new Date(dateString) < new Date();
   };
 
   return (
@@ -175,6 +214,32 @@ function MilestonesPage() {
           </Button>
         )}
       </header>
+
+      {/* KPI Stats Panel */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="rounded-xl border hairline bg-card p-4">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Milestones</div>
+          <div className="text-2xl font-bold mt-1 font-display">{stats.total}</div>
+        </div>
+        <div className="rounded-xl border hairline bg-card p-4">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">In Progress</div>
+          <div className="text-2xl font-bold mt-1 text-primary font-display">
+            {stats.inProgress}
+          </div>
+        </div>
+        <div className="rounded-xl border hairline bg-card p-4">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Completed</div>
+          <div className="text-2xl font-bold mt-1 text-success font-display">
+            {stats.completed}
+          </div>
+        </div>
+        <div className="rounded-xl border hairline bg-card p-4">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Overdue</div>
+          <div className="text-2xl font-bold mt-1 text-destructive font-display">
+            {stats.overdue}
+          </div>
+        </div>
+      </div>
 
       {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap">
@@ -227,6 +292,7 @@ function MilestonesPage() {
           {milestones.map((m) => {
             const project = projects.find((p) => p.id === m.projectId);
             const projectName = project ? project.name : m.projectCode || "Unknown Project";
+            const overdue = isOverdue(m.dueDate, m.status);
 
             return (
               <div
@@ -236,7 +302,12 @@ function MilestonesPage() {
                 <div>
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <h3 className="font-display text-lg font-muted">{m.name}</h3>
+                      <h3
+                        className="font-display text-lg font-semibold cursor-pointer hover:text-primary transition-colors"
+                        onClick={() => setViewMilestone(m)}
+                      >
+                        {m.name}
+                      </h3>
                       <p className="text-xs text-muted-foreground mt-0.5 font-mono">
                         {projectName}
                       </p>
@@ -252,35 +323,77 @@ function MilestonesPage() {
                       {m.description}
                     </p>
                   )}
-                  <div className="mt-3 flex items-center gap-1 text-xs text-muted-foreground">
-                    <Calendar className="size-3.5" />
-                    <span>Due: {fmtDate(m.dueDate)}</span>
+                  <div className="mt-3 flex items-center justify-between text-xs">
+                    <div className={cn("flex items-center gap-1", overdue ? "text-destructive font-semibold" : "text-muted-foreground")}>
+                      <Calendar className="size-3.5" />
+                      <span>Due: {fmtDate(m.dueDate)}</span>
+                    </div>
+                    {overdue && (
+                      <span className="flex items-center gap-1 text-[10px] text-destructive bg-destructive/15 px-1.5 py-0.5 rounded font-semibold uppercase">
+                        <AlertTriangle className="size-3" /> Overdue
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                {canEdit && (
-                  <div className="pt-3 border-t hairline flex justify-end gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8"
-                      onClick={() => handleOpenEdit(m)}
-                    >
-                      <Edit2 className="size-3.5 mr-1" /> Edit
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => handleDelete(m.id)}
-                    >
-                      <Trash2 className="size-3.5 mr-1" /> Delete
-                    </Button>
-                  </div>
-                )}
+                <div className="pt-3 border-t hairline flex justify-end gap-1.5">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2"
+                    onClick={() => setViewMilestone(m)}
+                  >
+                    <Eye className="size-3.5 mr-1" /> View
+                  </Button>
+                  {canEdit && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2"
+                        onClick={() => handleOpenEdit(m)}
+                      >
+                        <Edit2 className="size-3.5 mr-1" /> Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => confirmDelete(m)}
+                      >
+                        <Trash2 className="size-3.5 mr-1" /> Delete
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex justify-end gap-2 text-xs">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            disabled={page === 0}
+          >
+            Previous
+          </Button>
+          <span className="py-1.5 px-3 border border-input rounded-md bg-card">
+            Page {page + 1} of {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+            disabled={page === totalPages - 1}
+          >
+            Next
+          </Button>
         </div>
       )}
 
@@ -381,6 +494,71 @@ function MilestonesPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Details Drawer */}
+      <Sheet open={viewMilestone !== null} onOpenChange={(open) => !open && setViewMilestone(null)}>
+        <SheetContent className="bg-card border-l hairline sm:max-w-md">
+          <SheetHeader className="pb-4 border-b hairline">
+            <SheetTitle className="font-display text-xl">Milestone Details</SheetTitle>
+          </SheetHeader>
+          {viewMilestone && (
+            <div className="mt-6 space-y-6 text-sm">
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">Milestone Name</span>
+                <div className="font-semibold text-lg text-foreground">{viewMilestone.name}</div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">Project</span>
+                <div className="font-medium text-foreground">
+                  {projects.find((p) => p.id === viewMilestone.projectId)?.name || "Unknown"}
+                </div>
+              </div>
+
+              {viewMilestone.description && (
+                <div className="space-y-1">
+                  <span className="text-xs text-muted-foreground uppercase tracking-wider">Description</span>
+                  <div className="text-muted-foreground leading-relaxed">{viewMilestone.description}</div>
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">Due Date</span>
+                <div className={cn("font-medium", isOverdue(viewMilestone.dueDate, viewMilestone.status) ? "text-destructive font-semibold" : "text-foreground")}>
+                  {fmtDate(viewMilestone.dueDate)}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">Status</span>
+                <div>
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${statusStyle(viewMilestone.status)}`}
+                  >
+                    {viewMilestone.status}
+                  </span>
+                </div>
+              </div>
+
+              <div className="border-t hairline pt-4 text-xs text-muted-foreground space-y-1">
+                <div>Created At: {fmtDate(viewMilestone.createdAt)}</div>
+                {viewMilestone.updatedAt && <div>Updated At: {fmtDate(viewMilestone.updatedAt)}</div>}
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Delete Confirmation */}
+      <ConfirmationDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Delete Milestone"
+        description={`Are you sure you want to delete ${milestoneToDelete?.name}? This will remove it from release delivery timelines.`}
+        confirmLabel="Delete"
+        loading={deleteLoading}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

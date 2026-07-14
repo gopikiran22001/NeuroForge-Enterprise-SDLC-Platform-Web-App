@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmationDialog } from "@/components/shared/confirmation-dialog";
 
 const PROJECT_STATUSES = ["PLANNING", "ACTIVE", "ON_HOLD", "COMPLETED", "CANCELLED"];
 
@@ -79,6 +80,8 @@ function ProjectDetail() {
   // Dialogue & Form states
   const [editOpen, setEditOpen] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
@@ -208,13 +211,16 @@ function ProjectDetail() {
   };
 
   const handleDelete = async () => {
-    if (!window.confirm("Are you sure you want to delete this project? This will permanently remove it.")) return;
+    setDeleteLoading(true);
     try {
       await projectService.delete(rawProject.id);
       toast.success("Project deleted successfully");
+      setDeleteOpen(false);
       navigate({ to: "/projects" });
     } catch (err) {
       toast.error(err.message || "Failed to delete project");
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -252,7 +258,7 @@ function ProjectDetail() {
                 variant="ghost"
                 size="sm"
                 className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={handleDelete}
+                onClick={() => setDeleteOpen(true)}
               >
                 <Trash2 className="size-3.5 mr-1" /> Delete
               </Button>
@@ -566,6 +572,15 @@ function ProjectDetail() {
           </form>
         </DialogContent>
       </Dialog>
+      <ConfirmationDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Delete Project"
+        description={`Are you sure you want to delete ${rawProject.name}? This will permanently remove the project and all associated tasks/sprints.`}
+        confirmLabel="Delete"
+        loading={deleteLoading}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

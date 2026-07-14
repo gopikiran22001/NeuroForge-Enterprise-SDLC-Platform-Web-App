@@ -21,11 +21,13 @@ export const Route = createFileRoute("/settings")({
 
 function SettingsPage() {
   const { user, setUser } = useSession();
-  const [firstName, setFirstName] = useState(user.firstName || "");
-  const [lastName, setLastName] = useState(user.lastName || "");
-  const [email, setEmail] = useState(user.email || "");
+  const [firstName, setFirstName] = useState(user?.firstName || "");
+  const [lastName, setLastName] = useState(user?.lastName || "");
+  const [email, setEmail] = useState(user?.email || "");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
+  if (!user) return null;
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
@@ -39,7 +41,7 @@ function SettingsPage() {
         firstName,
         lastName,
         email,
-        role: mapFrontendRoleToBackend(user.role),
+        role: mapFrontendRoleToBackend(user?.role),
         status: "ACTIVE", // Current user is active
       };
 
@@ -159,7 +161,7 @@ function SettingsPage() {
                 <span className="text-xs font-semibold text-muted-foreground">
                   Assigned Workspace Role
                 </span>
-                <div className="text-sm font-medium">{ROLE_LABEL[user.role] || user.role}</div>
+                <div className="text-sm font-medium">{ROLE_LABEL[user?.role] || user?.role}</div>
               </div>
               <div className="space-y-1">
                 <span className="text-xs font-semibold text-muted-foreground">Account Status</span>

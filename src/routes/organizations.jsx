@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ShieldCheck, Plus, Search, Edit2, Trash2, ShieldAlert, Loader2, Filter, Check } from "lucide-react";
+import { ShieldCheck, Plus, Search, Edit2, Trash2, ShieldAlert, Loader2, Filter, Check, Eye } from "lucide-react";
 import { useSession } from "@/lib/session";
 import { api } from "@/lib/api";
 import { organizationService, userService } from "@/services/api-services";
@@ -22,6 +22,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { ConfirmationDialog } from "@/components/shared/confirmation-dialog";
+import { fmtDate } from "@/lib/format";
 
 export const Route = createFileRoute("/organizations")({
   head: () => ({
@@ -40,13 +48,21 @@ function OrganizationsPage() {
   const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  const [stats, setStats] = useState({ total: 0, active: 0, pendingApproval: 0, suspended: 0 });
 
-  // Dialog state
+  // Dialog & Drawer state
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingOrg, setEditingOrg] = useState(null); // null means creating
   const [formLoading, setFormLoading] = useState(false);
+  const [viewOrg, setViewOrg] = useState(null); // drawer details
+
+  // Delete confirmation state
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [orgToDelete, setOrgToDelete] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Form fields
   const [name, setName] = useState("");
@@ -57,7 +73,7 @@ function OrganizationsPage() {
   const [status, setStatus] = useState("ACTIVE");
   const [usersList, setUsersList] = useState([]);
 
-  const isSuperAdmin = currentUser.role === "super_admin";
+  const isSuperAdmin = currentUser?.role === "super_admin";
 
   const fetchOrgs = async () => {
     setLoading(true);
@@ -72,6 +88,12 @@ function OrganizationsPage() {
       });
       setOrgs(res.content || []);
       setTotalPages(res.totalPages || 0);
+      try {
+        const statsData = await organizationService.getStats();
+        setStats(statsData);
+      } catch (err) {
+        console.error("Failed to load organization stats", err);
+      }
     } catch (err) {
       toast.error(err.message || "Failed to load organizations");
     } finally {
@@ -82,7 +104,6 @@ function OrganizationsPage() {
   const fetchPendingAdmins = async () => {
     try {
       const res = await userService.getPending();
-      // Keep only ORG_ADMINs
       const admins = (res.content || []).filter((u) => u.role === "ORG_ADMIN" || u.role === "admin");
       setPendingAdmins(admins);
     } catch (err) {
@@ -189,14 +210,24 @@ function OrganizationsPage() {
     }
   };
 
-  const handleDelete = async (orgId) => {
-    if (!window.confirm("Are you sure you want to archive/delete this organization?")) return;
+  const confirmDelete = (org) => {
+    setOrgToDelete(org);
+    setDeleteOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!orgToDelete) return;
+    setDeleteLoading(true);
     try {
-      await organizationService.delete(orgId);
-      toast.success("Organization archived successfully");
+      await organizationService.delete(orgToDelete.id);
+      toast.success("Organization deleted successfully");
+      setDeleteOpen(false);
+      setOrgToDelete(null);
       fetchOrgs();
     } catch (err) {
       toast.error(err.message || "Failed to delete organization");
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -213,6 +244,16 @@ function OrganizationsPage() {
       </div>
     );
   }
+
+  // Filter organizations locally by search text
+  const filteredOrgs = orgs.filter((org) => {
+    const q = search.toLowerCase();
+    return (
+      org.name.toLowerCase().includes(q) ||
+      org.slug.toLowerCase().includes(q) ||
+      (org.ownerName && org.ownerName.toLowerCase().includes(q))
+    );
+  });
 
   return (
     <div className="p-6 md:p-8 max-w-[1400px] mx-auto space-y-6">
@@ -233,6 +274,32 @@ function OrganizationsPage() {
         </Button>
       </header>
 
+      {/* KPI Stats Panel */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="rounded-xl border hairline bg-card p-4">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Organizations</div>
+          <div className="text-2xl font-bold mt-1 font-display">{stats.total}</div>
+        </div>
+        <div className="rounded-xl border hairline bg-card p-4">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Active</div>
+          <div className="text-2xl font-bold mt-1 text-success font-display">
+            {stats.active}
+          </div>
+        </div>
+        <div className="rounded-xl border hairline bg-card p-4">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Pending Approval</div>
+          <div className="text-2xl font-bold mt-1 text-warning font-display">
+            {stats.pendingApproval}
+          </div>
+        </div>
+        <div className="rounded-xl border hairline bg-card p-4">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Suspended</div>
+          <div className="text-2xl font-bold mt-1 text-destructive font-display">
+            {stats.suspended}
+          </div>
+        </div>
+      </div>
+
       {/* Pending Administrators Section */}
       {pendingAdmins.length > 0 && (
         <div className="border border-warning/20 bg-warning/5 rounded-xl p-4 space-y-3">
@@ -240,22 +307,15 @@ function OrganizationsPage() {
             <ShieldCheck className="size-3.5" /> Pending Organization Administrators ({pendingAdmins.length})
           </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {pendingAdmins.map((admin) => (
-              <div key={admin.id} className="flex items-center justify-between p-3 border hairline bg-card rounded-lg text-xs">
-                <div className="min-w-0 pr-2">
+            {pendingAdmins.slice(0, 10).map((admin) => (
+              <div key={admin.id} className="p-3 border hairline bg-card rounded-lg text-xs">
+                <div className="min-w-0">
                   <div className="font-semibold truncate">{admin.firstName} {admin.lastName}</div>
                   <div className="text-muted-foreground truncate text-[11px]">{admin.email}</div>
                   <div className="text-[10px] text-warning font-medium mt-0.5 uppercase">
                     Organization: {admin.organizationName || "N/A"}
                   </div>
                 </div>
-                <Button
-                  size="xs"
-                  className="h-7 px-2 shrink-0 bg-warning hover:bg-warning/90 text-warning-foreground"
-                  onClick={() => handleApproveAdmin(admin.id)}
-                >
-                  <Check className="size-3.5 mr-1" /> Approve
-                </Button>
               </div>
             ))}
           </div>
@@ -264,6 +324,16 @@ function OrganizationsPage() {
 
       {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Search organizations..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-8 h-9 text-xs"
+          />
+        </div>
+
         <Select value={typeFilter} onValueChange={setTypeFilter}>
           <SelectTrigger className="w-40 h-9 text-xs bg-background">
             <Filter className="size-3 mr-1 text-muted-foreground" />
@@ -301,7 +371,7 @@ function OrganizationsPage() {
             <Loader2 className="size-6 animate-spin text-primary" />
             Loading organizations...
           </div>
-        ) : orgs.length === 0 ? (
+        ) : filteredOrgs.length === 0 ? (
           <div className="py-20 text-center text-muted-foreground text-sm">No organizations found.</div>
         ) : (
           <div className="overflow-x-auto">
@@ -317,10 +387,13 @@ function OrganizationsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-hairline)]">
-                {orgs.map((org) => {
+                {filteredOrgs.map((org) => {
                   return (
                     <tr key={org.id} className="hover:bg-accent/40 transition-colors">
-                      <td className="py-3 pl-4 pr-3 font-semibold text-foreground">
+                      <td
+                        className="py-3 pl-4 pr-3 font-semibold text-foreground cursor-pointer hover:text-primary transition-colors"
+                        onClick={() => setViewOrg(org)}
+                      >
                         {org.name}
                       </td>
                       <td className="py-3 px-3 text-muted-foreground">
@@ -378,6 +451,14 @@ function OrganizationsPage() {
                           variant="ghost"
                           size="icon"
                           className="size-7"
+                          onClick={() => setViewOrg(org)}
+                        >
+                          <Eye className="size-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-7"
                           onClick={() => handleOpenEdit(org)}
                         >
                           <Edit2 className="size-3.5" />
@@ -386,7 +467,7 @@ function OrganizationsPage() {
                           variant="ghost"
                           size="icon"
                           className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          onClick={() => handleDelete(org.id)}
+                          onClick={() => confirmDelete(org)}
                         >
                           <Trash2 className="size-3.5" />
                         </Button>
@@ -553,6 +634,91 @@ function OrganizationsPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Details Drawer / Sheet */}
+      <Sheet open={viewOrg !== null} onOpenChange={(open) => !open && setViewOrg(null)}>
+        <SheetContent className="bg-card border-l hairline sm:max-w-md">
+          <SheetHeader className="pb-4 border-b hairline">
+            <SheetTitle className="font-display text-xl">Organization Details</SheetTitle>
+          </SheetHeader>
+          {viewOrg && (
+            <div className="mt-6 space-y-6 text-sm">
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">Name</span>
+                <div className="font-semibold text-lg text-foreground">{viewOrg.name}</div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">URL Slug</span>
+                <div className="font-mono text-foreground">/{viewOrg.slug}</div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">Organization Type</span>
+                <div className="font-medium text-foreground">{viewOrg.type}</div>
+              </div>
+
+              {viewOrg.description && (
+                <div className="space-y-1">
+                  <span className="text-xs text-muted-foreground uppercase tracking-wider">Description</span>
+                  <div className="text-muted-foreground leading-relaxed">{viewOrg.description}</div>
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">Status</span>
+                <div>
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                      viewOrg.status === "ACTIVE"
+                        ? "bg-success/10 text-success"
+                        : viewOrg.status === "PENDING_APPROVAL"
+                        ? "bg-warning/10 text-warning"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {viewOrg.status}
+                  </span>
+                </div>
+              </div>
+
+              <div className="border-t hairline pt-4 space-y-3">
+                <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">Owner Details</h4>
+                {viewOrg.ownerName ? (
+                  <div className="space-y-2">
+                    <div>
+                      <span className="text-xs text-muted-foreground">Name:</span>
+                      <div className="font-medium text-foreground">{viewOrg.ownerName}</div>
+                    </div>
+                    <div>
+                      <span className="text-xs text-muted-foreground">Email:</span>
+                      <div className="font-medium text-foreground">{viewOrg.ownerEmail}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground italic">No owner assigned yet.</div>
+                )}
+              </div>
+
+              <div className="border-t hairline pt-4 text-xs text-muted-foreground space-y-1">
+                <div>Created At: {fmtDate(viewOrg.createdAt)}</div>
+                {viewOrg.updatedAt && <div>Updated At: {fmtDate(viewOrg.updatedAt)}</div>}
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Delete Confirmation */}
+      <ConfirmationDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Delete Organization"
+        description={`Are you sure you want to delete ${orgToDelete?.name}? This will suspend the tenant workspace.`}
+        confirmLabel="Delete"
+        loading={deleteLoading}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

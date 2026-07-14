@@ -43,8 +43,8 @@ function RolesPage() {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState(null);
 
-  const canView = currentUser.role === "admin" || currentUser.role === "pm";
-  const isAdmin = currentUser.role === "admin";
+  const canView = currentUser?.role === "admin" || currentUser?.role === "pm";
+  const isAdmin = currentUser?.role === "admin";
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -145,7 +145,7 @@ function RolesPage() {
                         </td>
                         <td className="py-3 px-3 text-muted-foreground">{u.email}</td>
                         <td className="py-3 pr-4 pl-3">
-                          {isAdmin && u.id !== currentUser.id ? (
+                          {isAdmin && u.id !== currentUser?.id ? (
                             <div className="flex items-center gap-2">
                               <Select
                                 value={mapBackendRoleToFrontend(u.role)}
@@ -156,11 +156,13 @@ function RolesPage() {
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {Object.entries(ROLE_LABEL).map(([val, label]) => (
-                                    <SelectItem key={val} value={val} className="text-[12px]">
-                                      {label}
-                                    </SelectItem>
-                                  ))}
+                                  {Object.entries(ROLE_LABEL)
+                                    .filter(([val]) => currentUser?.role === "super_admin" || val !== "super_admin")
+                                    .map(([val, label]) => (
+                                      <SelectItem key={val} value={val} className="text-[12px]">
+                                        {label}
+                                      </SelectItem>
+                                    ))}
                                 </SelectContent>
                               </Select>
                               {updatingId === u.id && (

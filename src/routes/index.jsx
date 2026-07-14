@@ -9,6 +9,7 @@ import { MilestoneTimeline } from "@/components/dashboard/milestone-timeline";
 import { QuickActions } from "@/components/dashboard/quick-actions";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { organizationService, userService } from "@/services/api-services";
 import {
   ArrowRight,
   ShieldCheck,
@@ -16,9 +17,25 @@ import {
   UsersRound,
   FolderKanban,
   Cpu,
+  Check,
+  X,
+  Building2,
+  Server,
+  Clock,
+  ShieldAlert,
+  Globe,
+  Users,
+  Activity,
+  CheckCircle2,
+  ListFilter,
+  AlertCircle,
+  Database,
+  ArrowUpRight,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NeuroForgeLogo } from "@/components/neuroforge-logo";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/")({
   head: ({ data }) => ({
@@ -427,41 +444,109 @@ function Dashboard() {
     teams: 0,
     milestones: 0,
     sprints: 0,
+    organizations: 0,
   });
+
+  // State for Lists (Recent view / Approvals)
+  const [orgs, setOrgs] = useState([]);
+  const [usersList, setUsersList] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [pendingOrgs, setPendingOrgs] = useState([]);
+  const [pendingUsers, setPendingUsers] = useState([]);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const userFirstName = user && user.name ? user.name.split(" ")[0] : "User";
+  const userRole = user ? user.role : "developer";
+
+  const fetchPageOrCatch = async (url) => {
+    try {
+      const res = await api.get(url);
+      return res.content || (Array.isArray(res) ? res : []);
+    } catch (e) {
+      console.warn("Failed to fetch", url, e);
+      return [];
+    }
+  };
+
+  const fetchData = async () => {
+    try {
+      if (userRole === "super_admin") {
+        const [orgsData, usersData, projData, pendingUsersData] = await Promise.all([
+          fetchPageOrCatch("/api/organizations?size=100"),
+          fetchPageOrCatch("/api/users?size=100"),
+          fetchPageOrCatch("/api/projects?size=100"),
+          fetchPageOrCatch("/api/users/pending?size=100"),
+        ]);
+        setOrgs(orgsData);
+        setUsersList(usersData);
+        setProjects(projData);
+        setPendingOrgs(orgsData.filter((o) => o.status === "PENDING_APPROVAL"));
+        setPendingUsers(pendingUsersData.filter((u) => u.role === "ORG_ADMIN" || u.role === "admin"));
+      } else {
+        const [projRes, userRes, teamRes, milRes, sprRes, pendingUsersData] = await Promise.all([
+          api.get("/api/projects?size=100").catch(() => ({ content: [], totalElements: 0 })),
+          api.get("/api/users?size=100").catch(() => ({ content: [], totalElements: 0 })),
+          api.get("/api/teams?size=100").catch(() => ({ content: [], totalElements: 0 })),
+          api.get("/api/milestones?size=100").catch(() => ({ content: [], totalElements: 0 })),
+          api.get("/api/sprints?size=100").catch(() => ({ content: [], totalElements: 0 })),
+          userRole === "admin" ? fetchPageOrCatch("/api/users/pending?size=100") : Promise.resolve([]),
+        ]);
+
+        setProjects(projRes.content || []);
+        setUsersList(userRes.content || []);
+        setPendingUsers(pendingUsersData);
+
+        setCounts({
+          projects: projRes.totalElements || projRes.content?.length || 0,
+          users: userRes.totalElements || userRes.content?.length || 0,
+          teams: teamRes.totalElements || teamRes.content?.length || 0,
+          milestones: milRes.totalElements || milRes.content?.length || 0,
+          sprints: sprRes.totalElements || sprRes.content?.length || 0,
+          organizations: 0,
+        });
+      }
+    } catch (err) {
+      console.error("Failed to load dashboard data:", err);
+    }
+  };
 
   useEffect(() => {
-    const fetchCounts = async () => {
-      try {
-        const [projRes, userRes, teamRes, milRes, sprRes] = await Promise.all([
-          api.get("/api/projects?size=1"),
-          api.get("/api/users?size=1"),
-          api.get("/api/teams?size=1"),
-          api.get("/api/milestones?size=1"),
-          api.get("/api/sprints?size=1"),
-        ]);
-        setCounts({
-          projects: projRes.totalElements || 0,
-          users: userRes.totalElements || 0,
-          teams: teamRes.totalElements || 0,
-          milestones: milRes.totalElements || 0,
-          sprints: sprRes.totalElements || 0,
-        });
-      } catch (err) {
-        console.error("Failed to load dashboard metrics:", err);
-      }
-    };
-    fetchCounts();
-  }, []);
+    fetchData();
+  }, [userRole]);
 
-  const userFirstName = user && user.name ? user.name.split(" ")[0] : "Priya";
-  const userRole = user ? user.role : "developer";
+  const handleApproveOrg = async (orgId) => {
+    setActionLoading(true);
+    try {
+      await organizationService.approve(orgId);
+      toast.success("Organization and Owner approved successfully!");
+      fetchData();
+    } catch (err) {
+      toast.error(err.message || "Failed to approve organization");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleApproveUser = async (userId) => {
+    setActionLoading(true);
+    try {
+      await userService.approve(userId);
+      toast.success("User approved successfully!");
+      fetchData();
+    } catch (err) {
+      toast.error(err.message || "Failed to approve user");
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   // Role-based details
   let subtext = "Acme Corp · Platform Engineering";
-  if (userRole === "admin") {
+  if (userRole === "super_admin") {
+    subtext = "Global Platform Administrator Command Cockpit";
+  } else if (userRole === "admin") {
     subtext = "System Administration Workspace Cockpit";
   } else if (userRole === "pm") {
     subtext = "Product & Delivery Management Dashboard";
@@ -475,6 +560,151 @@ function Dashboard() {
 
   const renderKpiAndPanels = () => {
     switch (userRole) {
+      case "super_admin":
+        return (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <KpiTile index={0} label="Organizations" value={orgs.length} spark={<Sparkline data={[orgs.length]} />} />
+              <KpiTile index={1} label="Pending Approvals" value={pendingOrgs.length + pendingUsers.length} spark={<Sparkline data={[pendingOrgs.length + pendingUsers.length]} color="var(--color-chart-2)" />} />
+              <KpiTile index={2} label="Active Users" value={usersList.filter(u => u.status === 'ACTIVE').length} spark={<Sparkline data={[usersList.filter(u => u.status === 'ACTIVE').length]} color="var(--color-chart-3)" />} />
+              <KpiTile index={3} label="Total Projects" value={projects.length} spark={<Sparkline data={[projects.length]} color="var(--color-chart-4)" />} />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="lg:col-span-2 space-y-4">
+                <div className="rounded-xl border border-border/40 bg-card p-6 space-y-4">
+                  <h2 className="text-sm font-semibold flex items-center gap-1.5">
+                    <ShieldCheck className="size-4 text-primary" /> Platform Approval Queue
+                  </h2>
+                  {pendingOrgs.length === 0 && pendingUsers.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No pending organization or user approvals.</p>
+                  ) : (
+                    <div className="divide-y divide-border/20">
+                      {pendingOrgs.map(org => (
+                        <div key={org.id} className="flex items-center justify-between py-3">
+                          <div>
+                            <div className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                              <Building2 className="size-3.5 text-muted-foreground" /> {org.name}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground mt-0.5">
+                              Slug: /{org.slug} · Type: {org.type}
+                            </div>
+                          </div>
+                          <Button 
+                            size="xs" 
+                            disabled={actionLoading}
+                            onClick={() => handleApproveOrg(org.id)}
+                          >
+                            Approve Organization
+                          </Button>
+                        </div>
+                      ))}
+                      {pendingUsers.map(u => (
+                        <div key={u.id} className="flex items-center justify-between py-3">
+                          <div>
+                            <div className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                              <Users className="size-3.5 text-muted-foreground" /> {u.firstName} {u.lastName}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground mt-0.5">
+                              Email: {u.email} · Role: ORG_ADMIN
+                            </div>
+                          </div>
+                          <Button 
+                            size="xs" 
+                            variant="secondary"
+                            disabled={actionLoading}
+                            onClick={() => handleApproveUser(u.id)}
+                          >
+                            Approve Admin
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-xl border border-border/40 bg-card p-6">
+                  <h2 className="text-sm font-semibold mb-4">Recent Organizations</h2>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs text-left">
+                      <thead>
+                        <tr className="border-b border-border/30 text-muted-foreground uppercase pb-2">
+                          <th className="py-2 pr-3">Name</th>
+                          <th className="py-2 px-3">Type</th>
+                          <th className="py-2 px-3">Status</th>
+                          <th className="py-2 pl-3 text-right">Created</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/20">
+                        {orgs.slice(0, 5).map(org => (
+                          <tr key={org.id} className="hover:bg-accent/10 transition-colors">
+                            <td className="py-3 pr-3 font-medium text-foreground">{org.name}</td>
+                            <td className="py-3 px-3 uppercase text-[10px]">{org.type}</td>
+                            <td className="py-3 px-3">
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${
+                                org.status === "ACTIVE" ? "bg-success/15 text-success" : "bg-warning/15 text-warning"
+                              }`}>{org.status}</span>
+                            </td>
+                            <td className="py-3 pl-3 text-right text-muted-foreground">{fmtDate(org.createdAt, "d MMM")}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="rounded-xl border border-border/40 bg-card p-6 space-y-4">
+                  <h2 className="text-sm font-semibold flex items-center gap-1.5">
+                    <Cpu className="size-4 text-primary" /> Platform Overview
+                  </h2>
+                  <div className="space-y-2.5 text-xs">
+                    <div className="flex justify-between pb-1 border-b border-border/10">
+                      <span className="text-muted-foreground">Platform Engine:</span>
+                      <span className="font-medium">NeuroForge Enterprise</span>
+                    </div>
+                    <div className="flex justify-between pb-1 border-b border-border/10">
+                      <span className="text-muted-foreground">Status:</span>
+                      <span className="text-success font-medium flex items-center gap-1">
+                        <CheckCircle2 className="size-3.5" /> Healthy
+                      </span>
+                    </div>
+                    <div className="flex justify-between pb-1 border-b border-border/10">
+                      <span className="text-muted-foreground">Uptime Target:</span>
+                      <span className="font-medium text-foreground">99.99%</span>
+                    </div>
+                    <div className="flex justify-between pb-1 border-b border-border/10">
+                      <span className="text-muted-foreground">API Version:</span>
+                      <span className="font-mono">v4.2.0</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Database:</span>
+                      <span className="font-mono text-[10px] text-foreground truncate max-w-[150px]">PostgreSQL</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-border/40 bg-card p-6">
+                  <h2 className="text-sm font-semibold mb-4">Recent Users</h2>
+                  <div className="space-y-3">
+                    {usersList.slice(0, 5).map(u => (
+                      <div key={u.id} className="flex items-center justify-between text-xs">
+                        <div>
+                          <div className="font-medium text-foreground">{u.firstName} {u.lastName}</div>
+                          <div className="text-[10px] text-muted-foreground">{u.email}</div>
+                        </div>
+                        <span className="text-[10px] uppercase bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                          {u.role ? u.role.replace("ROLE_", "") : "Member"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        );
       case "developer":
         return (
           <>
@@ -482,7 +712,7 @@ function Dashboard() {
               <KpiTile index={0} label="Assigned tasks" value={8} spark={<Sparkline data={[12, 10, 9, 8]} />} />
               <KpiTile index={1} label="Active repos" value={4} spark={<Sparkline data={[3, 3, 4, 4]} color="var(--color-chart-2)" />} />
               <KpiTile index={2} label="Build pipelines" value={2} spark={<Sparkline data={[1, 3, 2, 2]} color="var(--color-chart-3)" />} />
-              <KpiTile index={3} label="Open sprints" value={1} spark={<Sparkline data={[1, 1, 1, 1]} color="var(--color-chart-4)" />} />
+              <KpiTile index={3} label="Open sprints" value={counts.sprints} spark={<Sparkline data={[counts.sprints]} color="var(--color-chart-4)" />} />
               <KpiTile index={4} label="Code coverage" value="92.4%" spark={<Sparkline data={[89, 90, 91, 92]} color="var(--color-chart-5)" />} />
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -532,16 +762,61 @@ function Dashboard() {
           </>
         );
       case "admin":
+        return (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+              <KpiTile index={0} label="Active projects" value={counts.projects} spark={<Sparkline data={[counts.projects]} />} />
+              <KpiTile index={1} label="Users" value={counts.users} spark={<Sparkline data={[counts.users]} color="var(--color-chart-2)" />} />
+              <KpiTile index={2} label="Teams" value={counts.teams} spark={<Sparkline data={[counts.teams]} color="var(--color-chart-3)" />} />
+              <KpiTile index={3} label="Milestones" value={counts.milestones} spark={<Sparkline data={[counts.milestones]} color="var(--color-chart-4)" />} />
+              <KpiTile index={4} label="Sprints" value={counts.sprints} spark={<Sparkline data={[counts.sprints]} color="var(--color-chart-5)" />} />
+            </div>
+
+            {pendingUsers && pendingUsers.length > 0 && (
+              <div className="border border-primary/20 bg-primary-soft/10 rounded-xl p-6 space-y-4">
+                <h2 className="text-sm font-semibold flex items-center gap-1.5">
+                  <Users className="size-4 text-primary" /> Pending User Join Requests ({pendingUsers.length})
+                </h2>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {pendingUsers.map(u => (
+                    <div key={u.id} className="flex items-center justify-between p-3 border border-border/40 bg-card rounded-lg text-xs">
+                      <div>
+                        <div className="font-semibold text-foreground">{u.firstName} {u.lastName}</div>
+                        <div className="text-muted-foreground text-[10px] mt-0.5">{u.email}</div>
+                      </div>
+                      <Button 
+                        size="xs" 
+                        disabled={actionLoading}
+                        onClick={() => handleApproveUser(u.id)}
+                      >
+                        Approve
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-4">
+              <ActiveProjectsTable />
+            </div>
+            <section>
+              <div className="flex items-baseline justify-between mb-3">
+                <h2 className="text-sm font-semibold">Team performance</h2>
+              </div>
+              <TeamPerformanceGrid />
+            </section>
+          </>
+        );
       case "pm":
       default:
         return (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
-              <KpiTile index={0} label="Active projects" value={counts.projects} spark={<Sparkline data={[0, 1, 2, counts.projects]} />} />
-              <KpiTile index={1} label="Users" value={counts.users} spark={<Sparkline data={[0, 1, 2, counts.users]} color="var(--color-chart-2)" />} />
-              <KpiTile index={2} label="Teams" value={counts.teams} spark={<Sparkline data={[0, 1, 2, counts.teams]} color="var(--color-chart-3)" />} />
-              <KpiTile index={3} label="Milestones" value={counts.milestones} spark={<Sparkline data={[0, 1, 2, counts.milestones]} color="var(--color-chart-4)" />} />
-              <KpiTile index={4} label="Sprints" value={counts.sprints} spark={<Sparkline data={[0, 1, 2, counts.sprints]} color="var(--color-chart-5)" />} />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <KpiTile index={0} label="My Projects" value={counts.projects} spark={<Sparkline data={[counts.projects]} />} />
+              <KpiTile index={1} label="Team Count" value={counts.teams} spark={<Sparkline data={[counts.teams]} color="var(--color-chart-2)" />} />
+              <KpiTile index={2} label="Milestones Tracked" value={counts.milestones} spark={<Sparkline data={[counts.milestones]} color="var(--color-chart-3)" />} />
+              <KpiTile index={3} label="Sprints Conducted" value={counts.sprints} spark={<Sparkline data={[counts.sprints]} color="var(--color-chart-4)" />} />
             </div>
             <div className="grid grid-cols-1 gap-4">
               <ActiveProjectsTable />
@@ -559,7 +834,6 @@ function Dashboard() {
 
   return (
     <div className="p-6 md:p-8 max-w-[1600px] mx-auto space-y-8">
-      {/* Greeting strip */}
       <div className="flex flex-wrap items-end justify-between gap-6">
         <div>
           <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
@@ -577,10 +851,11 @@ function Dashboard() {
 
       {renderKpiAndPanels()}
 
-      {/* Milestones timeline */}
-      <div className="grid grid-cols-1 gap-4">
-        <MilestoneTimeline />
-      </div>
+      {userRole !== "super_admin" && (
+        <div className="grid grid-cols-1 gap-4">
+          <MilestoneTimeline />
+        </div>
+      )}
 
       <footer className="pt-6 pb-2 text-center text-[11px] text-muted-foreground">
         NeuroForge Nexus · v4.2.0 · region us-east-1

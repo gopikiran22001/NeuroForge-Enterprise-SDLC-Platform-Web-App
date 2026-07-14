@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { ConfirmationDialog } from "@/components/shared/confirmation-dialog";
 
 const PROJECT_STATUSES = ["PLANNING", "ACTIVE", "ON_HOLD", "COMPLETED", "CANCELLED"];
 
@@ -55,6 +56,11 @@ function ProjectList() {
   const [editingProject, setEditingProject] = useState(null);
   const [formLoading, setFormLoading] = useState(false);
 
+  // Delete state
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
   // Form fields
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
@@ -65,7 +71,7 @@ function ProjectList() {
   const [status, setStatus] = useState("ACTIVE");
   const [teamSearch, setTeamSearch] = useState("");
 
-  const canEdit = currentUser.role === "admin";
+  const canEdit = currentUser?.role === "admin";
 
   const fetchProjects = async () => {
     setLoading(true);
@@ -101,7 +107,7 @@ function ProjectList() {
     setCode("");
     setDescription("");
     setStartDate(new Date().toISOString().split("T")[0]);
-    setProjectManagerId(currentUser.id || users[0]?.id || "");
+    setProjectManagerId(currentUser?.id || users[0]?.id || "");
     setSelectedTeams([]);
     setStatus("ACTIVE");
     setTeamSearch("");
@@ -162,14 +168,24 @@ function ProjectList() {
     }
   };
 
-  const handleDelete = async (projectId) => {
-    if (!window.confirm("Are you sure you want to delete this project?")) return;
+  const confirmDelete = (proj) => {
+    setProjectToDelete(proj);
+    setDeleteOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!projectToDelete) return;
+    setDeleteLoading(true);
     try {
-      await projectService.delete(projectId);
+      await projectService.delete(projectToDelete.id);
       toast.success("Project deleted successfully");
+      setDeleteOpen(false);
+      setProjectToDelete(null);
       fetchProjects();
     } catch (err) {
       toast.error(err.message || "Failed to delete project");
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -302,7 +318,7 @@ function ProjectList() {
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      handleDelete(p.id);
+                      confirmDelete(p);
                     }}
                   >
                     <Trash2 className="size-3 mr-1" /> Delete
@@ -456,6 +472,15 @@ function ProjectList() {
           </form>
         </DialogContent>
       </Dialog>
+      <ConfirmationDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Delete Project"
+        description={`Are you sure you want to delete ${projectToDelete?.name}? This will permanently remove the project and its sprints.`}
+        confirmLabel="Delete"
+        loading={deleteLoading}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

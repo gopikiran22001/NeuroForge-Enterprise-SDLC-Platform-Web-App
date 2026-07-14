@@ -50,6 +50,8 @@ export const userService = {
 
   getPending: ({ page = 0, size = 20 } = {}) =>
     api.get(`/api/users/pending?page=${page}&size=${size}`),
+
+  getStats: () => api.get("/api/users/stats"),
 };
 
 // ─── Project Service ──────────────────────────────────────────
@@ -111,6 +113,9 @@ export const sprintService = {
   update: (id, payload) => api.put(`/api/sprints/${id}`, payload),
 
   delete: (id) => api.delete(`/api/sprints/${id}`),
+
+  getStats: ({ projectId } = {}) =>
+    api.get(`/api/sprints/stats${projectId ? "?projectId=" + projectId : ""}`),
 };
 
 // ─── Milestone Service ────────────────────────────────────────
@@ -132,6 +137,9 @@ export const milestoneService = {
   update: (id, payload) => api.put(`/api/milestones/${id}`, payload),
 
   delete: (id) => api.delete(`/api/milestones/${id}`),
+
+  getStats: ({ projectId } = {}) =>
+    api.get(`/api/milestones/stats${projectId ? "?projectId=" + projectId : ""}`),
 };
 
 // ─── Organization Service ────────────────────────────────────
@@ -158,4 +166,46 @@ export const organizationService = {
   approve: (id) => api.put(`/api/organizations/${id}/approve`),
 
   getActiveOrganizations: () => api.get("/api/organizations/active"),
+
+  getStats: () => api.get("/api/organizations/stats"),
+};
+
+// ─── Task Service ─────────────────────────────────────────────
+export const taskService = {
+  search: ({ projectId, sprintId, status, search, page = 0, size = 100 } = {}) => {
+    const params = new URLSearchParams();
+    if (projectId) params.set("projectId", projectId);
+    if (sprintId) params.set("sprintId", sprintId);
+    if (status) params.set("status", status);
+    if (search) params.set("search", search);
+    params.set("page", String(page));
+    params.set("size", String(size));
+    return api.get(`/api/tasks?${params.toString()}`);
+  },
+
+  getById: (id) => api.get(`/api/tasks/${id}`),
+
+  create: (payload) => api.post("/api/tasks", payload),
+
+  update: (id, payload) => api.put(`/api/tasks/${id}`, payload),
+
+  delete: (id) => api.delete(`/api/tasks/${id}`),
+
+  addComment: (id, text) => api.post(`/api/tasks/${id}/comments`, { text }),
+
+  addAttachment: (id, { name, size, url }) => api.post(`/api/tasks/${id}/attachments`, { name, size, url }),
+
+  getActivityHistory: (id) => api.get(`/api/tasks/${id}/history`),
+};
+
+// ─── Audit Log Service ─────────────────────────────────────────
+export const auditLogService = {
+  search: ({ severity, search, page = 0, size = 20 } = {}) => {
+    const params = new URLSearchParams();
+    if (severity && severity !== "ALL") params.set("severity", severity);
+    if (search) params.set("search", search);
+    params.set("page", String(page));
+    params.set("size", String(size));
+    return api.get(`/api/audit-logs?${params.toString()}`);
+  }
 };

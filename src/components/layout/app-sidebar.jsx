@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useSession } from "@/lib/session";
 import { NeuroForgeLogo } from "@/components/neuroforge-logo";
+import { canViewRoute } from "@/lib/permissions";
 const NAV = [
   {
     label: "Overview",
@@ -82,24 +83,7 @@ export function AppSidebar() {
   const isActive = (path) =>
     path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(path + "/");
   const filteredNav = NAV.map((group) => {
-    const items = group.items.filter((item) => {
-      // super_admin restrictions
-      if (user?.role === "super_admin") {
-        return item.url === "/" || item.url === "/organizations";
-      }
-
-      // normal user restrictions
-      if (item.url === "/organizations") {
-        return false;
-      }
-      if (item.url === "/users") {
-        return user?.role === "admin" || user?.role === "pm";
-      }
-      if (item.url === "/roles" || item.url === "/audit-log") {
-        return user?.role === "admin";
-      }
-      return true;
-    });
+    const items = group.items.filter((item) => canViewRoute(user?.role, item.url));
     return { ...group, items };
   }).filter((group) => group.items.length > 0);
 

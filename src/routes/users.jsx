@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Users, Plus, Search, Edit2, Trash2, ShieldAlert, Loader2, Filter, Check, X } from "lucide-react";
+import { Users, Plus, Search, Edit2, Trash2, ShieldAlert, Loader2, Filter, Check, X, Eye } from "lucide-react";
 import { useSession, mapBackendRoleToFrontend, mapFrontendRoleToBackend } from "@/lib/session";
 import { ROLE_LABEL } from "@/lib/permissions";
 import { api } from "@/lib/api";
@@ -23,6 +23,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ConfirmationDialog } from "@/components/shared/confirmation-dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { fmtDate } from "@/lib/format";
 
 export const Route = createFileRoute("/users")({
   head: () => ({
@@ -44,11 +52,18 @@ function UsersPage() {
   const [totalPages, setTotalPages] = useState(0);
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [stats, setStats] = useState({ total: 0, active: 0, pending: 0, suspended: 0 });
 
-  // Dialog state
+  // Dialog & Drawer state
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null); // null means creating
   const [formLoading, setFormLoading] = useState(false);
+  const [viewUser, setViewUser] = useState(null);
+
+  // Delete confirmation state
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Form fields
   const [firstName, setFirstName] = useState("");
@@ -58,13 +73,12 @@ function UsersPage() {
   const [role, setRole] = useState("developer");
   const [status, setStatus] = useState("ACTIVE");
 
-  const canView = currentUser.role === "admin" || currentUser.role === "pm";
-  const isAdmin = currentUser.role === "admin";
+  const canView = currentUser?.role === "admin" || currentUser?.role === "pm";
+  const isAdmin = currentUser?.role === "admin";
 
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      // Build search params
       const params = new URLSearchParams();
       params.set("page", String(page));
       params.set("size", "10");
@@ -75,6 +89,12 @@ function UsersPage() {
       const res = await api.get(`/api/users?${params.toString()}`);
       setUsers(res.content || []);
       setTotalPages(res.totalPages || 0);
+      try {
+        const statsData = await userService.getStats();
+        setStats(statsData);
+      } catch (err) {
+        console.error("Failed to load user stats", err);
+      }
     } catch (err) {
       toast.error(err.message || "Failed to load users");
     } finally {
@@ -117,9 +137,9 @@ function UsersPage() {
 
   const handleOpenEdit = (u) => {
     setEditingUser(u);
-    setFirstName(u.firstName);
-    setLastName(u.lastName);
-    setEmail(u.email);
+    setFirstName(u.firstName || "");
+    setLastName(u.lastName || "");
+    setEmail(u.email || "");
     setPassword(""); // Do not populate password
     setRole(mapBackendRoleToFrontend(u.role));
     setStatus(u.status || "ACTIVE");
@@ -145,11 +165,9 @@ function UsersPage() {
       }
 
       if (editingUser) {
-        // Update user
         await api.put(`/api/users?id=${editingUser.id}`, payload);
         toast.success("User updated successfully");
       } else {
-        // Create user
         await api.post("/api/users", payload);
         toast.success("User created successfully");
       }
@@ -162,15 +180,25 @@ function UsersPage() {
     }
   };
 
-  const handleDelete = async (userId) => {
-    if (!window.confirm("Are you sure you want to delete this user?")) return;
+  const confirmDelete = (u) => {
+    setUserToDelete(u);
+    setDeleteOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!userToDelete) return;
+    setDeleteLoading(true);
     try {
-      await api.delete(`/api/users?id=${userId}`);
+      await api.delete(`/api/users?id=${userToDelete.id}`);
       toast.success("User deleted successfully");
+      setDeleteOpen(false);
+      setUserToDelete(null);
       fetchUsers();
       fetchPendingUsers();
     } catch (err) {
       toast.error(err.message || "Failed to delete user");
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -219,6 +247,32 @@ function UsersPage() {
           </Button>
         )}
       </header>
+
+      {/* KPI Stats Panel */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="rounded-xl border hairline bg-card p-4">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Directory</div>
+          <div className="text-2xl font-bold mt-1 font-display">{stats.total}</div>
+        </div>
+        <div className="rounded-xl border hairline bg-card p-4">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Active Members</div>
+          <div className="text-2xl font-bold mt-1 text-success font-display">
+            {stats.active}
+          </div>
+        </div>
+        <div className="rounded-xl border hairline bg-card p-4">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Pending Join Requests</div>
+          <div className="text-2xl font-bold mt-1 text-warning font-display">
+            {stats.pending}
+          </div>
+        </div>
+        <div className="rounded-xl border hairline bg-card p-4">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Suspended</div>
+          <div className="text-2xl font-bold mt-1 text-destructive font-display">
+            {stats.suspended}
+          </div>
+        </div>
+      </div>
 
       {/* Pending Approval Section */}
       {isAdmin && pendingUsers.length > 0 && (
@@ -282,7 +336,9 @@ function UsersPage() {
           <SelectContent>
             <SelectItem value="ALL">All statuses</SelectItem>
             <SelectItem value="ACTIVE">ACTIVE</SelectItem>
-            <SelectItem value="INACTIVE">INACTIVE</SelectItem>
+            <SelectItem value="PENDING_APPROVAL">PENDING_APPROVAL</SelectItem>
+            <SelectItem value="SUSPENDED">SUSPENDED</SelectItem>
+            <SelectItem value="DELETED">DELETED</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -303,6 +359,7 @@ function UsersPage() {
                 <tr className="text-left text-[11px] uppercase tracking-wider text-muted-foreground border-b hairline">
                   <th className="py-2.5 pl-4 pr-3 font-medium">Name</th>
                   <th className="py-2.5 px-3 font-medium">Email</th>
+                  <th className="py-2.5 px-3 font-medium">Organization</th>
                   <th className="py-2.5 px-3 font-medium">Role</th>
                   <th className="py-2.5 px-3 font-medium">Status</th>
                   {isAdmin && <th className="py-2.5 pr-4 pl-3 text-right">Actions</th>}
@@ -316,7 +373,10 @@ function UsersPage() {
 
                   return (
                     <tr key={u.id} className="hover:bg-accent/40 transition-colors">
-                      <td className="py-3 pl-4 pr-3">
+                      <td
+                        className="py-3 pl-4 pr-3 cursor-pointer hover:text-primary transition-colors"
+                        onClick={() => setViewUser(u)}
+                      >
                         <div className="flex items-center gap-2.5">
                           <div className="grid size-7 place-items-center rounded-full bg-primary-soft text-primary text-[10px] font-semibold">
                             {initials || "U"}
@@ -327,6 +387,9 @@ function UsersPage() {
                         </div>
                       </td>
                       <td className="py-3 px-3 text-muted-foreground">{u.email}</td>
+                      <td className="py-3 px-3 text-muted-foreground">
+                        {u.organizationName || "Platform"}
+                      </td>
                       <td className="py-3 px-3">
                         <span className="inline-flex items-center rounded-md border hairline px-1.5 py-0.5 text-[11px] font-medium">
                           {roleLabel}
@@ -337,12 +400,18 @@ function UsersPage() {
                           className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
                             u.status === "ACTIVE"
                               ? "bg-success/10 text-success"
+                              : u.status === "PENDING_APPROVAL"
+                              ? "bg-warning/10 text-warning"
                               : "bg-muted text-muted-foreground"
                           }`}
                         >
                           <span
                             className={`size-1.5 rounded-full ${
-                              u.status === "ACTIVE" ? "bg-success" : "bg-muted-foreground"
+                              u.status === "ACTIVE"
+                                ? "bg-success"
+                                : u.status === "PENDING_APPROVAL"
+                                ? "bg-warning"
+                                : "bg-muted-foreground"
                             }`}
                           />
                           {u.status || "ACTIVE"}
@@ -354,16 +423,24 @@ function UsersPage() {
                             variant="ghost"
                             size="icon"
                             className="size-7"
+                            onClick={() => setViewUser(u)}
+                          >
+                            <Eye className="size-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7"
                             onClick={() => handleOpenEdit(u)}
                           >
                             <Edit2 className="size-3.5" />
                           </Button>
-                          {u.id !== currentUser.id && (
+                          {u.id !== currentUser?.id && (
                             <Button
                               variant="ghost"
                               size="icon"
                               className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                              onClick={() => handleDelete(u.id)}
+                              onClick={() => confirmDelete(u)}
                             >
                               <Trash2 className="size-3.5" />
                             </Button>
@@ -493,7 +570,9 @@ function UsersPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ACTIVE">ACTIVE</SelectItem>
-                    <SelectItem value="INACTIVE">INACTIVE</SelectItem>
+                    <SelectItem value="PENDING_APPROVAL">PENDING_APPROVAL</SelectItem>
+                    <SelectItem value="SUSPENDED">SUSPENDED</SelectItem>
+                    <SelectItem value="DELETED">DELETED</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -521,6 +600,71 @@ function UsersPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Profile Drawer / Sheet */}
+      <Sheet open={viewUser !== null} onOpenChange={(open) => !open && setViewUser(null)}>
+        <SheetContent className="bg-card border-l hairline sm:max-w-md">
+          <SheetHeader className="pb-4 border-b hairline">
+            <SheetTitle className="font-display text-xl">User Profile</SheetTitle>
+          </SheetHeader>
+          {viewUser && (
+            <div className="mt-6 space-y-6 text-sm">
+              <div className="flex items-center gap-3">
+                <div className="grid size-12 place-items-center rounded-full bg-primary-soft text-primary text-base font-semibold">
+                  {`${viewUser.firstName?.[0] || ""}${viewUser.lastName?.[0] || ""}`.toUpperCase()}
+                </div>
+                <div>
+                  <div className="font-semibold text-lg text-foreground">{viewUser.firstName} {viewUser.lastName}</div>
+                  <div className="text-xs text-muted-foreground">{viewUser.email}</div>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">Assigned Workspace Role</span>
+                <div className="font-medium text-foreground">{ROLE_LABEL[mapBackendRoleToFrontend(viewUser.role)] || viewUser.role}</div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">Organization</span>
+                <div className="font-medium text-foreground">{viewUser.organizationName || "Platform / Tenant Root"}</div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">Status</span>
+                <div>
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                      viewUser.status === "ACTIVE"
+                        ? "bg-success/10 text-success"
+                        : viewUser.status === "PENDING_APPROVAL"
+                        ? "bg-warning/10 text-warning"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {viewUser.status || "ACTIVE"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="border-t hairline pt-4 text-xs text-muted-foreground space-y-1">
+                <div>Created At: {fmtDate(viewUser.createdAt)}</div>
+                {viewUser.updatedAt && <div>Updated At: {fmtDate(viewUser.updatedAt)}</div>}
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Delete Confirmation */}
+      <ConfirmationDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Delete User Account"
+        description={`Are you sure you want to delete ${userToDelete?.firstName} ${userToDelete?.lastName}? This will revoke all access.`}
+        confirmLabel="Delete"
+        loading={deleteLoading}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }
