@@ -45,6 +45,11 @@ export const userService = {
   updateSelf: (payload) => api.put("/api/users", payload),
 
   delete: (id) => api.delete(`/api/users?id=${id}`),
+
+  approve: (id) => api.put(`/api/users/${id}/approve`),
+
+  getPending: ({ page = 0, size = 20 } = {}) =>
+    api.get(`/api/users/pending?page=${page}&size=${size}`),
 };
 
 // ─── Project Service ──────────────────────────────────────────
@@ -127,4 +132,30 @@ export const milestoneService = {
   update: (id, payload) => api.put(`/api/milestones/${id}`, payload),
 
   delete: (id) => api.delete(`/api/milestones/${id}`),
+};
+
+// ─── Organization Service ────────────────────────────────────
+export const organizationService = {
+  search: ({ type, status, page = 0, size = 20 } = {}) => {
+    const params = new URLSearchParams();
+    if (type) params.set("type", type);
+    if (status) params.set("status", status);
+    params.set("page", String(page));
+    params.set("size", String(size));
+    return api.get(`/api/organizations?${params.toString()}`);
+  },
+
+  getById: (id) => api.get(`/api/organizations/${id}`),
+
+  getBySlug: (slug) => api.get(`/api/organizations/slug/${slug}`),
+
+  create: (payload) => api.post("/api/organizations", payload),
+
+  update: (id, payload) => api.put(`/api/organizations/${id}`, payload),
+
+  delete: (id) => api.delete(`/api/organizations/${id}`),
+
+  approve: (id) => api.put(`/api/organizations/${id}/approve`),
+
+  getActiveOrganizations: () => api.get("/api/organizations/active"),
 };

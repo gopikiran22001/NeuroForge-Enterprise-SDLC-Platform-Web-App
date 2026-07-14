@@ -1,11 +1,15 @@
 export const ROLE_LABEL = {
-  admin: "Administrator",
+  super_admin: "Super Administrator",
+  admin: "Organization Administrator",
   pm: "Project Manager",
   developer: "Developer",
   tester: "Tester",
   devops: "DevOps Engineer",
 };
 const MATRIX = {
+  super_admin: [
+    "manage_organizations",
+  ],
   admin: [
     "manage_users",
     "manage_roles",

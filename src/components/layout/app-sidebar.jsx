@@ -59,6 +59,7 @@ const NAV = [
   {
     label: "Organization",
     items: [
+      { title: "Organizations", url: "/organizations", icon: ShieldCheck },
       { title: "Users", url: "/users", icon: Users },
       { title: "Teams", url: "/teams", icon: UsersRound },
       { title: "Roles", url: "/roles", icon: ShieldCheck },
@@ -82,6 +83,15 @@ export function AppSidebar() {
     path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(path + "/");
   const filteredNav = NAV.map((group) => {
     const items = group.items.filter((item) => {
+      // super_admin restrictions
+      if (user?.role === "super_admin") {
+        return item.url === "/" || item.url === "/organizations";
+      }
+
+      // normal user restrictions
+      if (item.url === "/organizations") {
+        return false;
+      }
       if (item.url === "/users") {
         return user?.role === "admin" || user?.role === "pm";
       }

@@ -35,8 +35,32 @@ function RegisterPage() {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("developer");
 
+  // Organization fields
+  const [activeOrgs, setActiveOrgs] = useState([]);
+  const [selectedOrgId, setSelectedOrgId] = useState("");
+  const [orgName, setOrgName] = useState("");
+  const [orgSlug, setOrgSlug] = useState("");
+  const [orgType, setOrgType] = useState("ENTERPRISE");
+  const [orgDescription, setOrgDescription] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [isPending, setIsPending] = useState(false);
+
+  useEffect(() => {
+    const fetchActiveOrgs = async () => {
+      try {
+        const res = await api.get("/api/organizations/active");
+        setActiveOrgs(res || []);
+        if (res && res.length > 0) {
+          setSelectedOrgId(res[0].id);
+        }
+      } catch (err) {
+        console.error("Failed to load active organizations", err);
+      }
+    };
+    fetchActiveOrgs();
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -48,12 +72,36 @@ function RegisterPage() {
       toast.error("Password must be at least 8 characters long.");
       return;
     }
+
+    const orgData = {};
+    if (role === "admin") {
+      if (!orgName || !orgSlug) {
+        toast.error("Organization name and slug are required.");
+        return;
+      }
+      orgData.orgName = orgName;
+      orgData.orgSlug = orgSlug;
+      orgData.orgType = orgType;
+      orgData.orgDescription = orgDescription;
+    } else {
+      if (!selectedOrgId) {
+        toast.error("Please select an organization to join.");
+        return;
+      }
+      orgData.organizationId = selectedOrgId;
+    }
+
     setLoading(true);
     setError("");
     try {
-      await register(firstName, lastName, email, password, role);
-      toast.success("Account created successfully!");
-      navigate({ to: "/" });
+      const user = await register(firstName, lastName, email, password, role, orgData);
+      if (user && user.status === "PENDING_APPROVAL") {
+        setIsPending(true);
+        toast.success("Registration request submitted!");
+      } else {
+        toast.success("Account created successfully!");
+        navigate({ to: "/" });
+      }
     } catch (err) {
       const errMsg = err.message || "Failed to create account. Please try again.";
       setError(errMsg);
@@ -62,6 +110,36 @@ function RegisterPage() {
       setLoading(false);
     }
   };
+
+  if (isPending) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <div className="max-w-md w-full text-center space-y-6 p-8 border hairline bg-card rounded-2xl">
+          <div className="size-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto">
+            <Loader2 className="size-8 animate-spin" />
+          </div>
+          <h1 className="font-display text-3xl">Pending Approval</h1>
+          {role === "admin" ? (
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Your organization registration request for <strong className="text-foreground">{orgName}</strong> has been submitted. A platform administrator (Super Admin) will review and approve your organization shortly.
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Your request to join the organization has been submitted. The organization administrator (Org Admin) must approve your membership before you can log in.
+            </p>
+          )}
+          <div className="pt-4 border-t hairline">
+            <Link
+              to="/login"
+              className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90 w-full"
+            >
+              Return to Login
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">
@@ -177,7 +255,7 @@ function RegisterPage() {
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">Administrator</SelectItem>
+                  <SelectItem value="admin">Organization Administrator</SelectItem>
                   <SelectItem value="pm">Project Manager</SelectItem>
                   <SelectItem value="developer">Developer</SelectItem>
                   <SelectItem value="tester">QA Tester</SelectItem>
@@ -185,6 +263,94 @@ function RegisterPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Org-related input fields */}
+            {role === "admin" ? (
+              <div className="space-y-4 border-t border-b hairline py-4 my-2">
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  New Organization Details
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="orgName">Organization Name</Label>
+                  <Input
+                    id="orgName"
+                    required
+                    placeholder="e.g. Acme Corporation"
+                    value={orgName}
+                    onChange={(e) => {
+                      setOrgName(e.target.value);
+                      // Auto slugify
+                      setOrgSlug(
+                        e.target.value
+                          .toLowerCase()
+                          .replace(/[^a-z0-9]+/g, "-")
+                          .replace(/(^-|-$)/g, "")
+                      );
+                    }}
+                    disabled={loading}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="orgSlug">Slug (URL-safe identifier)</Label>
+                  <Input
+                    id="orgSlug"
+                    required
+                    placeholder="e.g. acme-corp"
+                    value={orgSlug}
+                    onChange={(e) => setOrgSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                    disabled={loading}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="orgType">Organization Type</Label>
+                  <Select value={orgType} onValueChange={setOrgType} disabled={loading}>
+                    <SelectTrigger className="bg-background">
+                      <SelectValue placeholder="Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ENTERPRISE">Enterprise</SelectItem>
+                      <SelectItem value="STARTUP">Startup</SelectItem>
+                      <SelectItem value="AGENCY">Agency</SelectItem>
+                      <SelectItem value="EDUCATIONAL">Educational</SelectItem>
+                      <SelectItem value="GOVERNMENT">Government</SelectItem>
+                      <SelectItem value="NON_PROFIT">Non Profit</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="orgDescription">Description</Label>
+                  <Input
+                    id="orgDescription"
+                    placeholder="Brief description of the organization"
+                    value={orgDescription}
+                    onChange={(e) => setOrgDescription(e.target.value)}
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1.5 border-t border-b hairline py-4 my-2">
+                <Label htmlFor="organization">Select Organization</Label>
+                {activeOrgs.length === 0 ? (
+                  <div className="text-xs text-muted-foreground italic py-2">
+                    No active organizations available. Please ask your administrator.
+                  </div>
+                ) : (
+                  <Select value={selectedOrgId} onValueChange={setSelectedOrgId} disabled={loading}>
+                    <SelectTrigger className="bg-background">
+                      <SelectValue placeholder="Select organization to join" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activeOrgs.map((org) => (
+                        <SelectItem key={org.id} value={org.id}>
+                          {org.name} ({org.slug})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            )}
 
             <Button type="submit" className="w-full pt-1" disabled={loading}>
               {loading ? (

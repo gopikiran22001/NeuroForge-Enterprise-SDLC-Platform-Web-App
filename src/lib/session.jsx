@@ -6,7 +6,10 @@ const SessionCtx = createContext(null);
 export function mapBackendRoleToFrontend(role) {
   if (!role) return "developer";
   switch (role.toUpperCase()) {
-    case "ADMIN":
+    case "SUPER_ADMIN":
+      return "super_admin";
+    case "ORG_ADMIN":
+    case "ADMIN": // backwards compatibility
       return "admin";
     case "PROJECT_MANAGER":
       return "pm";
@@ -24,8 +27,10 @@ export function mapBackendRoleToFrontend(role) {
 export function mapFrontendRoleToBackend(role) {
   if (!role) return "DEVELOPER";
   switch (role.toLowerCase()) {
+    case "super_admin":
+      return "SUPER_ADMIN";
     case "admin":
-      return "ADMIN";
+      return "ORG_ADMIN";
     case "pm":
       return "PROJECT_MANAGER";
     case "developer":
@@ -48,8 +53,10 @@ function getAvatarColor(firstName) {
 
 function getTitleForRole(role) {
   switch (role) {
+    case "super_admin":
+      return "Super Administrator";
     case "admin":
-      return "Administrator";
+      return "Organization Administrator";
     case "pm":
       return "Project Manager";
     case "developer":
@@ -134,16 +141,20 @@ export function SessionProvider({ children }) {
     return formattedUser;
   };
 
-  const register = async (firstName, lastName, email, password, role) => {
-    const response = await api.post("/api/auth/register", {
+  const register = async (firstName, lastName, email, password, role, orgData = {}) => {
+    const payload = {
       firstName,
       lastName,
       email,
       password,
       role: mapFrontendRoleToBackend(role),
-    });
+      ...orgData,
+    };
+    const response = await api.post("/api/auth/register", payload);
     const formattedUser = formatSessionUser(response.user);
-    setUser(formattedUser);
+    if (formattedUser && formattedUser.status !== "PENDING_APPROVAL") {
+      setUser(formattedUser);
+    }
     return formattedUser;
   };
 

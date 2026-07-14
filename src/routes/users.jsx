@@ -1,9 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Users, Plus, Search, Edit2, Trash2, ShieldAlert, Loader2, Filter } from "lucide-react";
+import { Users, Plus, Search, Edit2, Trash2, ShieldAlert, Loader2, Filter, Check, X } from "lucide-react";
 import { useSession, mapBackendRoleToFrontend, mapFrontendRoleToBackend } from "@/lib/session";
 import { ROLE_LABEL } from "@/lib/permissions";
 import { api } from "@/lib/api";
+import { userService } from "@/services/api-services";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,6 +37,7 @@ export const Route = createFileRoute("/users")({
 function UsersPage() {
   const { user: currentUser } = useSession();
   const [users, setUsers] = useState([]);
+  const [pendingUsers, setPendingUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
@@ -80,6 +82,17 @@ function UsersPage() {
     }
   };
 
+  const fetchPendingUsers = async () => {
+    if (isAdmin) {
+      try {
+        const res = await userService.getPending();
+        setPendingUsers(res.content || []);
+      } catch (err) {
+        console.error("Failed to load pending users", err);
+      }
+    }
+  };
+
   useEffect(() => {
     setPage(0);
   }, [search, roleFilter, statusFilter]);
@@ -87,6 +100,7 @@ function UsersPage() {
   useEffect(() => {
     if (canView) {
       fetchUsers();
+      fetchPendingUsers();
     }
   }, [page, search, roleFilter, statusFilter]);
 
@@ -154,8 +168,20 @@ function UsersPage() {
       await api.delete(`/api/users?id=${userId}`);
       toast.success("User deleted successfully");
       fetchUsers();
+      fetchPendingUsers();
     } catch (err) {
       toast.error(err.message || "Failed to delete user");
+    }
+  };
+
+  const handleApprove = async (userId) => {
+    try {
+      await userService.approve(userId);
+      toast.success("User approved successfully");
+      fetchUsers();
+      fetchPendingUsers();
+    } catch (err) {
+      toast.error(err.message || "Failed to approve user");
     }
   };
 
@@ -193,6 +219,33 @@ function UsersPage() {
           </Button>
         )}
       </header>
+
+      {/* Pending Approval Section */}
+      {isAdmin && pendingUsers.length > 0 && (
+        <div className="border border-primary/20 bg-primary-soft/10 rounded-xl p-4 space-y-3">
+          <div className="text-xs font-semibold text-primary uppercase tracking-wider flex items-center gap-1.5">
+            <Users className="size-3.5" /> Pending Join Requests ({pendingUsers.length})
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {pendingUsers.map((p) => (
+              <div key={p.id} className="flex items-center justify-between p-3 border hairline bg-card rounded-lg text-xs">
+                <div className="min-w-0 pr-2">
+                  <div className="font-semibold truncate">{p.firstName} {p.lastName}</div>
+                  <div className="text-muted-foreground truncate text-[11px]">{p.email}</div>
+                  <div className="text-[10px] text-primary font-medium mt-0.5 uppercase">{ROLE_LABEL[mapBackendRoleToFrontend(p.role)] || p.role}</div>
+                </div>
+                <Button
+                  size="xs"
+                  className="h-7 px-2 shrink-0"
+                  onClick={() => handleApprove(p.id)}
+                >
+                  <Check className="size-3.5 mr-1" /> Approve
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap">
