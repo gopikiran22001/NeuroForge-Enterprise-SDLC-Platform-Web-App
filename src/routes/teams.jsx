@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { UsersRound, Plus, Search, Edit2, Trash2, ShieldAlert, Loader2, Filter, Eye } from "lucide-react";
-import { useSession } from "@/lib/session";
+import { useSession, mapBackendRoleToFrontend } from "@/lib/session";
+import { ROLE_LABEL } from "@/lib/permissions";
 import { teamService, userService } from "@/services/api-services";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -93,11 +94,41 @@ function TeamsPage() {
     fetchData();
   }, [search, statusFilter]);
 
+  // Compute which user IDs are already assigned to any team
+  const usersAlreadyInTeam = new Set(
+    teams.flatMap((t) => [...(t.memberIds || []), t.teamLeaderId].filter(Boolean)),
+  );
+
+  // Excluded roles for team membership
+  const EXCLUDED_ROLES = ["ORG_ADMIN", "PROJECT_MANAGER"];
+
+  // Users eligible for team assignment (not in any team + not excluded roles)
+  // When editing, also include users who are currently in *this* team
+  const getAvailableUsers = (currentTeam) => {
+    return users.filter((u) => {
+      // Always exclude ORG_ADMIN and PROJECT_MANAGER
+      if (EXCLUDED_ROLES.includes(u.role)) return false;
+
+      // If creating, exclude anyone already in a team
+      if (!currentTeam) {
+        return !usersAlreadyInTeam.has(u.id);
+      }
+
+      // If editing, keep current team members + anyone not in any other team
+      const currentTeamMemberIds = new Set([
+        ...(currentTeam.memberIds || []),
+        currentTeam.teamLeaderId,
+      ].filter(Boolean));
+      return currentTeamMemberIds.has(u.id) || !usersAlreadyInTeam.has(u.id);
+    });
+  };
+
   const handleOpenCreate = () => {
     setEditingTeam(null);
     setName("");
     setDescription("");
-    setTeamLeaderId(users[0]?.id || "");
+    const available = getAvailableUsers(null);
+    setTeamLeaderId(available[0]?.id || "");
     setSelectedMembers([]);
     setStatus("ACTIVE");
     setMemberSearch("");
@@ -368,70 +399,79 @@ function TeamsPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="teamLeader">Team Leader</Label>
-                <Select value={teamLeaderId} onValueChange={setTeamLeaderId} disabled={formLoading}>
-                  <SelectTrigger className="bg-background">
-                    <SelectValue placeholder="Select leader" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {users.map((u) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {u.firstName} {u.lastName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="status">Status</Label>
-                <Select value={status} onValueChange={setStatus} disabled={formLoading}>
-                  <SelectTrigger className="bg-background">
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ACTIVE">ACTIVE</SelectItem>
-                    <SelectItem value="INACTIVE">INACTIVE</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Members Checklist */}
-            <div className="space-y-2">
-              <Label>Team Members</Label>
-              <Input
-                placeholder="Filter members..."
-                value={memberSearch}
-                onChange={(e) => setMemberSearch(e.target.value)}
-                className="h-8 text-xs mb-2"
-                disabled={formLoading}
-              />
-              <div className="border hairline rounded-lg p-3 max-h-[160px] overflow-y-auto space-y-2 bg-background [&::-webkit-scrollbar]:hidden [scrollbar-width:none] [-ms-overflow-style:none]">
-                {users
-                  .filter((u) => {
-                    const fullName = `${u.firstName || ""} ${u.lastName || ""}`.toLowerCase();
-                    const email = (u.email || "").toLowerCase();
-                    const q = memberSearch.toLowerCase();
-                    return fullName.includes(q) || email.includes(q);
-                  })
-                  .map((u) => (
-                    <div key={u.id} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`chk-${u.id}`}
-                        checked={selectedMembers.includes(u.id)}
-                        onCheckedChange={() => handleToggleMember(u.id)}
-                        disabled={formLoading}
-                      />
-                      <label htmlFor={`chk-${u.id}`} className="text-xs cursor-pointer select-none">
-                        {u.firstName} {u.lastName} ({u.email})
-                      </label>
+            {(() => {
+              const dialogUsers = getAvailableUsers(editingTeam);
+              return (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="teamLeader">Team Leader</Label>
+                      <Select value={teamLeaderId} onValueChange={setTeamLeaderId} disabled={formLoading}>
+                        <SelectTrigger className="bg-background">
+                          <SelectValue placeholder="Select leader" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {dialogUsers.map((u) => (
+                            <SelectItem key={u.id} value={u.id}>
+                              {u.firstName} {u.lastName}
+                              <span className="ml-1 text-muted-foreground">· {ROLE_LABEL[mapBackendRoleToFrontend(u.role)] || u.role}</span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                  ))}
-              </div>
-            </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="status">Status</Label>
+                      <Select value={status} onValueChange={setStatus} disabled={formLoading}>
+                        <SelectTrigger className="bg-background">
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ACTIVE">ACTIVE</SelectItem>
+                          <SelectItem value="INACTIVE">INACTIVE</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {/* Members Checklist */}
+                  <div className="space-y-2">
+                    <Label>Team Members</Label>
+                    <Input
+                      placeholder="Filter members..."
+                      value={memberSearch}
+                      onChange={(e) => setMemberSearch(e.target.value)}
+                      className="h-8 text-xs mb-2"
+                      disabled={formLoading}
+                    />
+                    <div className="border hairline rounded-lg p-3 max-h-[160px] overflow-y-auto space-y-2 bg-background [&::-webkit-scrollbar]:hidden [scrollbar-width:none] [-ms-overflow-style:none]">
+                      {dialogUsers
+                        .filter((u) => {
+                          const fullName = `${u.firstName || ""} ${u.lastName || ""}`.toLowerCase();
+                          const email = (u.email || "").toLowerCase();
+                          const q = memberSearch.toLowerCase();
+                          return fullName.includes(q) || email.includes(q);
+                        })
+                        .map((u) => (
+                          <div key={u.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`chk-${u.id}`}
+                              checked={selectedMembers.includes(u.id)}
+                              onCheckedChange={() => handleToggleMember(u.id)}
+                              disabled={formLoading}
+                            />
+                            <label htmlFor={`chk-${u.id}`} className="text-xs cursor-pointer select-none">
+                              {u.firstName} {u.lastName} ({u.email})
+                              <span className="ml-1 text-muted-foreground">· {ROLE_LABEL[mapBackendRoleToFrontend(u.role)] || u.role}</span>
+                            </label>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
 
             <DialogFooter className="pt-4 border-t hairline mt-4">
               <Button
