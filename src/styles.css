@@ -179,6 +179,13 @@
 @layer base {
   * {
     border-color: var(--color-border);
+    /* Hide scrollbars globally while keeping scroll functionality */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+  }
+
+  *::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
   }
 
   html,
@@ -188,6 +195,7 @@
     font-family: var(--font-sans);
     font-feature-settings: "cv02", "cv03", "cv04", "ss01";
     -webkit-font-smoothing: antialiased;
+    overflow-y: auto;
   }
 
   h1,

@@ -189,24 +189,28 @@ function OrganizationsPage() {
   };
 
   const handleApprove = async (orgId) => {
+    setLoading(true);
     try {
       await organizationService.approve(orgId);
       toast.success("Organization and Owner approved successfully!");
-      fetchOrgs();
-      fetchPendingAdmins();
+      await fetchOrgs();
+      await fetchPendingAdmins();
     } catch (err) {
       toast.error(err.message || "Failed to approve organization");
+      setLoading(false);
     }
   };
 
   const handleApproveAdmin = async (userId) => {
+    setLoading(true);
     try {
       await userService.approve(userId);
       toast.success("Administrator approved successfully!");
-      fetchOrgs();
-      fetchPendingAdmins();
+      await fetchOrgs();
+      await fetchPendingAdmins();
     } catch (err) {
       toast.error(err.message || "Failed to approve administrator");
+      setLoading(false);
     }
   };
 
@@ -217,17 +221,16 @@ function OrganizationsPage() {
 
   const handleDelete = async () => {
     if (!orgToDelete) return;
-    setDeleteLoading(true);
+    setLoading(true);
     try {
       await organizationService.delete(orgToDelete.id);
       toast.success("Organization deleted successfully");
       setDeleteOpen(false);
       setOrgToDelete(null);
-      fetchOrgs();
+      await fetchOrgs();
     } catch (err) {
       toast.error(err.message || "Failed to delete organization");
-    } finally {
-      setDeleteLoading(false);
+      setLoading(false);
     }
   };
 
@@ -365,15 +368,19 @@ function OrganizationsPage() {
       </div>
 
       {/* Orgs Table */}
-      <div className="rounded-xl border hairline bg-card overflow-hidden">
-        {loading ? (
-          <div className="py-20 flex flex-col items-center justify-center text-muted-foreground text-xs gap-2">
-            <Loader2 className="size-6 animate-spin text-primary" />
-            Loading organizations...
+      <div className="relative">
+        {loading && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/20 backdrop-blur-[1px] rounded-xl">
+            <div className="flex items-center gap-2.5 rounded-xl bg-card border hairline p-4 shadow-elegant animate-fade-in">
+              <Loader2 className="size-5 animate-spin text-primary" />
+              <span className="text-xs font-semibold text-foreground">Updating organizations...</span>
+            </div>
           </div>
-        ) : filteredOrgs.length === 0 ? (
-          <div className="py-20 text-center text-muted-foreground text-sm">No organizations found.</div>
-        ) : (
+        )}
+        <div className={`rounded-xl border hairline bg-card overflow-hidden transition-opacity duration-300 min-h-[200px] ${loading ? "opacity-50 pointer-events-none" : "opacity-100"}`}>
+          {filteredOrgs.length === 0 && !loading ? (
+            <div className="py-20 text-center text-muted-foreground text-sm">No organizations found.</div>
+          ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-[13px]">
               <thead>
@@ -478,7 +485,8 @@ function OrganizationsPage() {
               </tbody>
             </table>
           </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Pagination */}

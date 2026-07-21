@@ -175,17 +175,16 @@ function ProjectList() {
 
   const handleDelete = async () => {
     if (!projectToDelete) return;
-    setDeleteLoading(true);
+    setLoading(true);
     try {
       await projectService.delete(projectToDelete.id);
       toast.success("Project deleted successfully");
       setDeleteOpen(false);
       setProjectToDelete(null);
-      fetchProjects();
+      await fetchProjects();
     } catch (err) {
       toast.error(err.message || "Failed to delete project");
-    } finally {
-      setDeleteLoading(false);
+      setLoading(false);
     }
   };
 
@@ -236,15 +235,20 @@ function ProjectList() {
         </div>
       </header>
 
-      {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center text-muted-foreground text-xs gap-2">
-          <Loader2 className="size-6 animate-spin text-primary" />
-          Loading projects...
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="py-20 text-center text-muted-foreground text-sm">No projects found.</div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-6">
+      <div className="relative">
+        {loading && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/20 backdrop-blur-[1px] rounded-xl">
+            <div className="flex items-center gap-2.5 rounded-xl bg-card border hairline p-4 shadow-elegant animate-fade-in">
+              <Loader2 className="size-5 animate-spin text-primary" />
+              <span className="text-xs font-semibold text-foreground">Updating projects...</span>
+            </div>
+          </div>
+        )}
+        <div className={`transition-opacity duration-300 min-h-[200px] ${loading ? "opacity-50 pointer-events-none" : "opacity-100"}`}>
+        {filtered.length === 0 && !loading ? (
+          <div className="py-20 text-center text-muted-foreground text-sm">No projects found.</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-6">
           {filtered.map((p) => (
             <div
               key={p.id}
@@ -329,6 +333,8 @@ function ProjectList() {
           ))}
         </div>
       )}
+        </div>
+      </div>
 
       {/* Edit/Create Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

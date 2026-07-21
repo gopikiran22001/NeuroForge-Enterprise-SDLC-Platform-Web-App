@@ -130,13 +130,16 @@ function AuditLogPage() {
       </div>
 
       {/* Audit Logs Table */}
-      <div className="rounded-xl border hairline bg-card overflow-hidden">
-        {loading ? (
-          <div className="py-20 flex flex-col items-center justify-center text-muted-foreground text-xs gap-2">
-            <Loader2 className="size-6 animate-spin text-primary" />
-            Loading security logs...
+      <div className="relative">
+        {loading && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/20 backdrop-blur-[1px] rounded-xl">
+            <div className="flex items-center gap-2.5 rounded-xl bg-card border hairline p-4 shadow-elegant animate-fade-in">
+              <Loader2 className="size-5 animate-spin text-primary" />
+              <span className="text-xs font-semibold text-foreground">Updating security logs...</span>
+            </div>
           </div>
-        ) : (
+        )}
+        <div className={`rounded-xl border hairline bg-card overflow-hidden transition-opacity duration-300 min-h-[200px] ${loading ? "opacity-50 pointer-events-none" : "opacity-100"}`}>
           <div className="overflow-x-auto">
             <table className="w-full text-[13px] text-left">
               <thead>
@@ -188,11 +191,11 @@ function AuditLogPage() {
               </tbody>
             </table>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Pagination controls */}
-      {!loading && totalPages > 1 && (
+      {totalPages > 1 && (
         <div className="flex justify-end gap-2 text-xs">
           <Button
             variant="outline"

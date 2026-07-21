@@ -258,6 +258,7 @@ function TasksPage() {
   const handleStatusChange = async (taskId, newStatus) => {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
+    setLoading(true);
     try {
       const payload = {
         title: task.title,
@@ -273,10 +274,11 @@ function TasksPage() {
         blockers: task.blockers,
       };
       await taskService.update(taskId, payload);
-      fetchTasks();
+      await fetchTasks();
       toast.success(`Task status updated to ${newStatus}`);
     } catch (err) {
       toast.error("Failed to update status");
+      setLoading(false);
     }
   };
 
@@ -287,14 +289,16 @@ function TasksPage() {
 
   const handleDelete = async () => {
     if (!taskToDelete) return;
+    setLoading(true);
     try {
       await taskService.delete(taskToDelete.id);
       toast.success("Task deleted successfully");
       setDeleteOpen(false);
       setTaskToDelete(null);
-      fetchTasks();
+      await fetchTasks();
     } catch (err) {
       toast.error("Failed to delete task");
+      setLoading(false);
     }
   };
 
@@ -530,13 +534,17 @@ function TasksPage() {
             </div>
           </div>
 
-          {loading ? (
-            <div className="py-20 flex flex-col items-center justify-center text-muted-foreground text-xs gap-2">
-              <Loader2 className="size-6 animate-spin text-primary" />
-              Loading board tasks...
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 overflow-x-auto pb-4">
+          <div className="relative">
+            {loading && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/20 backdrop-blur-[1px]">
+                <div className="flex items-center gap-2.5 rounded-xl bg-card border hairline p-4 shadow-elegant animate-fade-in">
+                  <Loader2 className="size-5 animate-spin text-primary" />
+                  <span className="text-xs font-semibold text-foreground">Updating tasks...</span>
+                </div>
+              </div>
+            )}
+            <div className={`transition-opacity duration-300 min-h-[300px] ${loading ? "opacity-50 pointer-events-none" : "opacity-100"}`}>
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 overflow-x-auto pb-4">
               {COLUMNS.map(col => {
                 const colTasks = filteredTasks.filter(t => t.status === col.id);
                 return (
@@ -604,8 +612,9 @@ function TasksPage() {
                 );
               })}
             </div>
-          )}
-        </TabsContent>
+          </div>
+        </div>
+      </TabsContent>
 
         {/* 2. Sprint Board Tab */}
         <TabsContent value="sprint" className="space-y-6">

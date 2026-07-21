@@ -191,17 +191,16 @@ function TeamsPage() {
 
   const handleDelete = async () => {
     if (!teamToDelete) return;
-    setDeleteLoading(true);
+    setLoading(true);
     try {
       await teamService.delete(teamToDelete.id);
       toast.success("Team deleted successfully");
       setDeleteOpen(false);
       setTeamToDelete(null);
-      fetchData();
+      await fetchData();
     } catch (err) {
       toast.error(err.message || "Failed to delete team");
-    } finally {
-      setDeleteLoading(false);
+      setLoading(false);
     }
   };
 
@@ -271,14 +270,19 @@ function TeamsPage() {
       </div>
 
       {/* Teams grid */}
-      {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center text-muted-foreground text-xs gap-2">
-          <Loader2 className="size-6 animate-spin text-primary" />
-          Loading teams...
-        </div>
-      ) : teams.length === 0 ? (
-        <div className="py-20 text-center text-muted-foreground text-sm">No teams found.</div>
-      ) : (
+      <div className="relative">
+        {loading && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/20 backdrop-blur-[1px] rounded-xl">
+            <div className="flex items-center gap-2.5 rounded-xl bg-card border hairline p-4 shadow-elegant animate-fade-in">
+              <Loader2 className="size-5 animate-spin text-primary" />
+              <span className="text-xs font-semibold text-foreground">Updating teams...</span>
+            </div>
+          </div>
+        )}
+        <div className={`transition-opacity duration-300 min-h-[200px] ${loading ? "opacity-50 pointer-events-none" : "opacity-100"}`}>
+        {teams.length === 0 && !loading ? (
+          <div className="py-20 text-center text-muted-foreground text-sm">No teams found.</div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {teams.map((t) => {
             const leadUser = users.find((u) => u.id === t.teamLeaderId);
@@ -366,6 +370,8 @@ function TeamsPage() {
           })}
         </div>
       )}
+        </div>
+      </div>
 
       {/* Edit/Create Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

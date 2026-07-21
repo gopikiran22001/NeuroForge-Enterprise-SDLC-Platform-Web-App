@@ -168,17 +168,16 @@ function SprintsPage() {
 
   const handleDelete = async () => {
     if (!sprintToDelete) return;
-    setDeleteLoading(true);
+    setLoading(true);
     try {
       await sprintService.delete(sprintToDelete.id);
       toast.success("Sprint deleted successfully");
       setDeleteOpen(false);
       setSprintToDelete(null);
-      fetchData();
+      await fetchData();
     } catch (err) {
       toast.error(err.message || "Failed to delete sprint");
-    } finally {
-      setDeleteLoading(false);
+      setLoading(false);
     }
   };
 
@@ -266,14 +265,19 @@ function SprintsPage() {
       </div>
 
       {/* Sprints listing */}
-      {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center text-muted-foreground text-xs gap-2">
-          <Loader2 className="size-6 animate-spin text-primary" />
-          Loading sprints...
-        </div>
-      ) : sprints.length === 0 ? (
-        <div className="py-20 text-center text-muted-foreground text-sm">No sprints found.</div>
-      ) : (
+      <div className="relative">
+        {loading && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/20 backdrop-blur-[1px] rounded-xl">
+            <div className="flex items-center gap-2.5 rounded-xl bg-card border hairline p-4 shadow-elegant animate-fade-in">
+              <Loader2 className="size-5 animate-spin text-primary" />
+              <span className="text-xs font-semibold text-foreground">Updating sprints...</span>
+            </div>
+          </div>
+        )}
+        <div className={`transition-opacity duration-300 min-h-[200px] ${loading ? "opacity-50 pointer-events-none" : "opacity-100"}`}>
+        {sprints.length === 0 && !loading ? (
+          <div className="py-20 text-center text-muted-foreground text-sm">No sprints found.</div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {sprints.map((s) => {
             const project = projects.find((p) => p.id === s.projectId);
@@ -372,6 +376,8 @@ function SprintsPage() {
           })}
         </div>
       )}
+        </div>
+      </div>
 
       {/* Pagination */}
       {totalPages > 1 && (
