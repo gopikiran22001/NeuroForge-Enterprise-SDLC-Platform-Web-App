@@ -83,6 +83,8 @@ export function formatSessionUser(backendUser) {
     title: getTitleForRole(role),
     avatarColor: getAvatarColor(backendUser.firstName),
     status: backendUser.status || "ACTIVE",
+    organizationId: backendUser.organizationId,
+    organizationName: backendUser.organizationName,
   };
 }
 
