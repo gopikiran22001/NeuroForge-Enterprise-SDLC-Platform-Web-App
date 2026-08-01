@@ -67,6 +67,8 @@ cp .env.example .env
 
 ### 2. Install dependencies
 
+..
+
 ```bash
 npm install
 # or
