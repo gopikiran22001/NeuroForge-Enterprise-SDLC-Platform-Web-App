@@ -209,3 +209,87 @@ export const auditLogService = {
     return api.get(`/api/audit-logs?${params.toString()}`);
   }
 };
+
+// ─── SCM Connection Service (Legacy Fallback) ─────────────────
+export const scmConnectionService = {
+  search: () => Promise.resolve({ content: [] }),
+  getById: () => Promise.resolve(null),
+  create: () => Promise.reject(new Error("SCM Connections have been migrated to Project Repository properties.")),
+  update: () => Promise.reject(new Error("SCM Connections have been migrated to Project Repository properties.")),
+  delete: () => Promise.resolve(),
+};
+
+// ─── Pipeline Service ──────────────────────────────────────────
+export const pipelineService = {
+  search: ({ projectId, search, status, page = 0, size = 50 } = {}) => {
+    const params = new URLSearchParams();
+    if (projectId) params.set("projectId", projectId);
+    if (search) params.set("search", search);
+    if (status) params.set("status", status);
+    params.set("page", String(page));
+    params.set("size", String(size));
+    return api.get(`/api/pipelines?${params.toString()}`);
+  },
+
+  getById: (id) => api.get(`/api/pipelines/${id}`),
+
+  create: (payload) => api.post("/api/pipelines", payload),
+
+  update: (id, payload) => api.put(`/api/pipelines/${id}`, payload),
+
+  delete: (id) => api.delete(`/api/pipelines/${id}`),
+
+  getStats: (projectId) =>
+    api.get(`/api/pipelines/stats${projectId ? "?projectId=" + projectId : ""}`),
+};
+
+// ─── Build Service ────────────────────────────────────────────
+export const buildService = {
+  search: ({ pipelineId, status, page = 0, size = 50 } = {}) => {
+    const params = new URLSearchParams();
+    if (pipelineId) params.set("pipelineId", pipelineId);
+    if (status) params.set("status", status);
+    params.set("page", String(page));
+    params.set("size", String(size));
+    return api.get(`/api/builds?${params.toString()}`);
+  },
+
+  getById: (id) => api.get(`/api/builds/${id}`),
+
+  create: (payload) => api.post("/api/builds", payload),
+
+  update: (id, payload) => api.put(`/api/builds/${id}`, payload),
+
+  delete: (id) => api.delete(`/api/builds/${id}`),
+
+  getLatest: (pipelineId) => api.get(`/api/builds/latest?pipelineId=${pipelineId}`),
+
+  getLogs: (id) => api.get(`/api/builds/${id}/logs`),
+
+  getStats: () => api.get("/api/builds/stats"),
+};
+
+// ─── Deployment Service ───────────────────────────────────────
+export const deploymentService = {
+  search: ({ buildId, pipelineId, environment, status, page = 0, size = 50 } = {}) => {
+    const params = new URLSearchParams();
+    if (buildId) params.set("buildId", buildId);
+    if (pipelineId) params.set("pipelineId", pipelineId);
+    if (environment) params.set("environment", environment);
+    if (status) params.set("status", status);
+    params.set("page", String(page));
+    params.set("size", String(size));
+    return api.get(`/api/deployments?${params.toString()}`);
+  },
+
+  getById: (id) => api.get(`/api/deployments/${id}`),
+
+  create: (payload) => api.post("/api/deployments", payload),
+
+  update: (id, payload) => api.put(`/api/deployments/${id}`, payload),
+
+  delete: (id) => api.delete(`/api/deployments/${id}`),
+
+  getStats: () => api.get("/api/deployments/stats"),
+};
+

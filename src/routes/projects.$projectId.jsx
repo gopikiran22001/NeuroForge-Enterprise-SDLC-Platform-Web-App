@@ -1,9 +1,8 @@
 import { createFileRoute, Link, notFound, useRouter, useNavigate } from "@tanstack/react-router";
-import { ChevronLeft, GitBranch, Users, Calendar, Layers, Edit2, Trash2, Loader2 } from "lucide-react";
+import { ChevronLeft, GitBranch, Users, Calendar, Layers, Edit2, Trash2, Loader2, ExternalLink, Workflow, Server } from "lucide-react";
 import { fmtDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { projectService, teamService, userService, sprintService, milestoneService } from "@/services/api-services";
+import { projectService, teamService, userService, sprintService, milestoneService, pipelineService, buildService, deploymentService } from "@/services/api-services";
 import { mapBackendProjectToFrontend } from "@/components/dashboard/active-projects-table";
 import { useSession } from "@/lib/session";
 import { useState } from "react";
@@ -25,19 +24,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ConfirmationDialog } from "@/components/shared/confirmation-dialog";
-
 const PROJECT_STATUSES = ["PLANNING", "ACTIVE", "ON_HOLD", "COMPLETED", "CANCELLED"];
 
 export const Route = createFileRoute("/projects/$projectId")({
   loader: async ({ params }) => {
     try {
-      const [p, sprintsRes, milestonesRes, usersRes, teamsRes] = await Promise.all([
+      const [p, sprintsRes, milestonesRes, usersRes, teamsRes, pipelinesRes, buildsRes, deploymentsRes] = await Promise.all([
         projectService.getById(params.projectId),
         sprintService.search({ projectId: params.projectId, size: 100 }).catch(() => ({ content: [] })),
         milestoneService.search({ projectId: params.projectId, size: 100 }).catch(() => ({ content: [] })),
         userService.search({ size: 100 }).catch(() => ({ content: [] })),
         teamService.search({ size: 100 }).catch(() => ({ content: [] })),
+        pipelineService.search({ projectId: params.projectId, size: 100 }).catch(() => ({ content: [] })),
+        buildService.search({ size: 100 }).catch(() => ({ content: [] })),
+        deploymentService.search({ size: 100 }).catch(() => ({ content: [] })),
       ]);
 
       const project = mapBackendProjectToFrontend(p);
@@ -50,6 +50,9 @@ export const Route = createFileRoute("/projects/$projectId")({
         milestones: milestonesRes?.content || [],
         users: usersRes?.content || [],
         teams: teamsRes?.content || [],
+        pipelines: pipelinesRes?.content || [],
+        builds: (buildsRes?.content || []).filter(b => b.projectId === params.projectId),
+        deployments: (deploymentsRes?.content || []).filter(d => d.projectId === params.projectId),
       };
     } catch (err) {
       console.error("Failed to load project details:", err);
@@ -91,8 +94,11 @@ function ProjectDetail() {
   const [projectManagerId, setProjectManagerId] = useState("");
   const [selectedTeams, setSelectedTeams] = useState([]);
   const [status, setStatus] = useState("ACTIVE");
+  const [repositoryUrl, setRepositoryUrl] = useState("");
+  const [repositoryProvider, setRepositoryProvider] = useState("GITHUB");
+  const [defaultBranch, setDefaultBranch] = useState("main");
 
-  const canEdit = currentUser?.role === "admin";
+  const canEdit = currentUser?.role === "admin" || currentUser?.role === "super_admin";
 
   // Resolve assigned teams
   const projectTeamIds = rawProject.teamIds ? Array.from(rawProject.teamIds) : [];
@@ -126,7 +132,6 @@ function ProjectDetail() {
           isLeader: assignedTeams.some((t) => t.teamLeaderId === uid),
         };
       }
-      // Fallback formatting from emails if user list is empty/unaccessible (e.g. Developer role 403)
       const teamLead = assignedTeams.find((t) => t.teamLeaderId === uid);
       if (teamLead && teamLead.teamLeaderEmail) {
         const derivedName = teamLead.teamLeaderEmail
@@ -176,6 +181,9 @@ function ProjectDetail() {
     setProjectManagerId(rawProject.projectManagerId || "");
     setSelectedTeams(rawProject.teamIds ? Array.from(rawProject.teamIds) : []);
     setStatus(rawProject.status || "ACTIVE");
+    setRepositoryUrl(rawProject.repositoryUrl || "");
+    setRepositoryProvider(rawProject.repositoryProvider || "GITHUB");
+    setDefaultBranch(rawProject.defaultBranch || "main");
     setEditOpen(true);
   };
 
@@ -198,6 +206,9 @@ function ProjectDetail() {
         projectManagerId: projectManagerId || null,
         teamIds: selectedTeams,
         status,
+        repositoryUrl: repositoryUrl || null,
+        repositoryProvider: repositoryProvider || "GITHUB",
+        defaultBranch: defaultBranch || "main",
       };
       await projectService.update(rawProject.id, payload);
       toast.success("Project updated successfully");
@@ -402,28 +413,90 @@ function ProjectDetail() {
           </div>
         </div>
 
-        {/* Team list card */}
-        <div className="rounded-xl border hairline bg-card p-6 self-start">
-          <h2 className="text-sm font-semibold">Team</h2>
-          <div className="mt-4 space-y-2.5">
-            {assignedUsers.length === 0 ? (
-              <div className="text-xs text-muted-foreground text-center py-4">No assigned team members.</div>
+        {/* Sidebar cards */}
+        <div className="space-y-4 self-start">
+          {/* Team list card */}
+          <div className="rounded-xl border hairline bg-card p-6">
+            <h2 className="text-sm font-semibold">Team</h2>
+            <div className="mt-4 space-y-2.5">
+              {assignedUsers.length === 0 ? (
+                <div className="text-xs text-muted-foreground text-center py-4">No assigned team members.</div>
+              ) : (
+                assignedUsers.map((u) => (
+                  <div key={u.id} className="flex items-center gap-2.5">
+                    <div className="grid size-7 place-items-center rounded-full bg-foreground text-background text-[10px] font-semibold">
+                      {u.name
+                        .split(" ")
+                        .map((p) => p[0])
+                        .slice(0, 2)
+                        .join("")}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm truncate font-medium">{u.name}</div>
+                      <div className="text-[11px] text-muted-foreground">{getDisplayRole(u)}</div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Repository Information Card */}
+          <div className="rounded-xl border hairline bg-card p-6 space-y-3">
+            <h2 className="text-sm font-semibold flex items-center justify-between">
+              <span>Source Repository</span>
+              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-primary-soft text-primary">
+                {rawProject.repositoryProvider || "GITHUB"}
+              </span>
+            </h2>
+            <div className="space-y-2 text-xs">
+              <div>
+                <div className="text-[10px] text-muted-foreground uppercase">Default Branch</div>
+                <div className="font-mono font-medium mt-0.5 text-foreground">{rawProject.defaultBranch || "main"}</div>
+              </div>
+              <div>
+                <div className="text-[10px] text-muted-foreground uppercase">Repository URL</div>
+                {rawProject.repositoryUrl ? (
+                  <a
+                    href={rawProject.repositoryUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono text-[11px] text-primary hover:underline inline-flex items-center gap-1 mt-0.5 truncate max-w-full"
+                  >
+                    <span className="truncate">{rawProject.repositoryUrl}</span>
+                    <ExternalLink className="size-3 shrink-0" />
+                  </a>
+                ) : (
+                  <div className="text-muted-foreground italic mt-0.5">Not configured</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Pipelines Summary Card */}
+          <div className="rounded-xl border hairline bg-card p-6 space-y-3">
+            <h2 className="text-sm font-semibold flex items-center justify-between">
+              <span>Pipelines</span>
+              <span className="text-[11px] font-normal text-muted-foreground">{pipelines.length} configured</span>
+            </h2>
+            {pipelines.length === 0 ? (
+              <div className="text-xs text-muted-foreground text-center py-4 border border-dashed rounded-lg hairline">
+                No pipelines configured.
+              </div>
             ) : (
-              assignedUsers.map((u) => (
-                <div key={u.id} className="flex items-center gap-2.5">
-                  <div className="grid size-7 place-items-center rounded-full bg-foreground text-background text-[10px] font-semibold">
-                    {u.name
-                      .split(" ")
-                      .map((p) => p[0])
-                      .slice(0, 2)
-                      .join("")}
+              <div className="space-y-2">
+                {pipelines.map((pip) => (
+                  <div key={pip.id} className="p-2.5 rounded-lg border hairline bg-background flex items-center justify-between text-xs">
+                    <div>
+                      <div className="font-medium text-foreground">{pip.name}</div>
+                      <div className="text-[10px] text-muted-foreground font-mono">{pip.provider} · {pip.branch}</div>
+                    </div>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded font-mono bg-muted text-muted-foreground">
+                      {pip.lastRunStatus || "NEVER_RUN"}
+                    </span>
                   </div>
-                  <div className="min-w-0">
-                    <div className="text-sm truncate font-medium">{u.name}</div>
-                    <div className="text-[11px] text-muted-foreground">{getDisplayRole(u)}</div>
-                  </div>
-                </div>
-              ))
+                ))}
+              </div>
             )}
           </div>
         </div>
@@ -527,6 +600,49 @@ function ProjectDetail() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            {/* Repository Metadata */}
+            <div className="space-y-3 pt-2 border-t hairline">
+              <div className="text-xs font-semibold text-foreground">Repository Metadata</div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="repositoryProvider">Provider</Label>
+                  <Select value={repositoryProvider} onValueChange={setRepositoryProvider} disabled={formLoading}>
+                    <SelectTrigger className="bg-background">
+                      <SelectValue placeholder="Select provider" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="GITHUB">GitHub</SelectItem>
+                      <SelectItem value="GITLAB">GitLab</SelectItem>
+                      <SelectItem value="BITBUCKET">Bitbucket</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="defaultBranch">Default Branch</Label>
+                  <Input
+                    id="defaultBranch"
+                    placeholder="e.g. main"
+                    value={defaultBranch}
+                    onChange={(e) => setDefaultBranch(e.target.value)}
+                    disabled={formLoading}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="repositoryUrl">Repository URL</Label>
+                <Input
+                  id="repositoryUrl"
+                  placeholder="https://github.com/organization/repository"
+                  value={repositoryUrl}
+                  onChange={(e) => setRepositoryUrl(e.target.value)}
+                  disabled={formLoading}
+                />
               </div>
             </div>
 

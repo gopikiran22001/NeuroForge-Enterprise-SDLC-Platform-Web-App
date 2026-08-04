@@ -9,7 +9,7 @@ import { MilestoneTimeline } from "@/components/dashboard/milestone-timeline";
 import { QuickActions } from "@/components/dashboard/quick-actions";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { organizationService, userService } from "@/services/api-services";
+import { organizationService, userService, pipelineService, buildService, deploymentService } from "@/services/api-services";
 import {
   ArrowRight,
   ShieldCheck,
@@ -366,72 +366,126 @@ function TesterRunsList() {
 }
 
 function DevOpsEnvironments() {
-  const envs = [
-    { name: "Production", version: "v4.2.0", latency: "42ms", cpu: "28%", status: "HEALTHY" },
-    { name: "Staging", version: "v4.3.0-rc2", latency: "68ms", cpu: "42%", status: "HEALTHY" },
-    { name: "QA / Dev", version: "v4.3.0-rc5", latency: "120ms", cpu: "78%", status: "WARNING" },
-  ];
+  const [deployments, setDeployments] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    deploymentService
+      .search({ size: 10 })
+      .then((res) => setDeployments(res.content || []))
+      .catch(() => setDeployments([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const envList = ["PRODUCTION", "STAGING", "QA", "DEV"];
+
   return (
     <div className="rounded-xl border border-border/40 bg-card p-6">
-      <h2 className="text-sm font-semibold mb-4">Environment Status</h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {envs.map((env, i) => (
-          <div key={i} className="p-4 border border-border/20 rounded-xl bg-background/40 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-xs text-foreground">{env.name}</span>
-              <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${
-                env.status === "HEALTHY" ? "bg-success/15 text-success" : "bg-warning/15 text-warning"
-              }`}>{env.status}</span>
-            </div>
-            <div className="space-y-1 text-[11px] text-muted-foreground">
-              <div className="flex justify-between"><span>Version:</span><span className="font-mono font-medium text-foreground">{env.version}</span></div>
-              <div className="flex justify-between"><span>Latency:</span><span className="font-medium text-foreground">{env.latency}</span></div>
-              <div className="flex justify-between"><span>CPU Usage:</span><span className="font-medium text-foreground">{env.cpu}</span></div>
-            </div>
-          </div>
-        ))}
-      </div>
+      <h2 className="text-sm font-semibold mb-4">Environment Deployment Status</h2>
+      {loading ? (
+        <div className="py-6 text-center text-xs text-muted-foreground">Loading environments...</div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          {envList.map((envName) => {
+            const dep = deployments.find((d) => d.environment === envName);
+            return (
+              <div key={envName} className="p-4 border border-border/20 rounded-xl bg-background/40 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-xs text-foreground">{envName}</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${
+                      dep?.status === "SUCCESS"
+                        ? "bg-success/15 text-success"
+                        : dep?.status === "FAILED"
+                          ? "bg-destructive/15 text-destructive"
+                          : "bg-warning/15 text-warning"
+                    }`}
+                  >
+                    {dep?.status || "INACTIVE"}
+                  </span>
+                </div>
+                <div className="space-y-1 text-[11px] text-muted-foreground">
+                  <div className="flex justify-between">
+                    <span>Version:</span>
+                    <span className="font-mono font-medium text-foreground">{dep?.version || "—"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Build:</span>
+                    <span className="font-mono font-medium text-foreground">{dep?.buildNumber ? `#${dep.buildNumber}` : "—"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Deployed:</span>
+                    <span className="font-medium text-foreground">{dep?.deployedAt ? fmtDate(dep.deployedAt, "d MMM, HH:mm") : "—"}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
 function DevOpsPipelineHistory() {
-  const runs = [
-    { id: "#2490", workflow: "Main Release Pipeline", duration: "8m 40s", triggeredBy: "DevOps Bot", status: "SUCCESS" },
-    { id: "#2489", workflow: "Dev Branch CI Trigger", duration: "3m 15s", triggeredBy: "Amit Verma", status: "SUCCESS" },
-    { id: "#2488", workflow: "QA Deployment Script", duration: "12m 8s", triggeredBy: "Priya Nair", status: "FAILED" },
-  ];
+  const [builds, setBuilds] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    buildService
+      .search({ size: 10 })
+      .then((res) => setBuilds(res.content || []))
+      .catch(() => setBuilds([]))
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
     <div className="rounded-xl border border-border/40 bg-card p-6">
-      <h2 className="text-sm font-semibold mb-4">Build Logs & History</h2>
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs text-left">
-          <thead>
-            <tr className="border-b border-border/30 text-muted-foreground uppercase pb-2">
-              <th className="py-2 pr-3 text-left">Run</th>
-              <th className="py-2 px-3 text-left">Workflow</th>
-              <th className="py-2 px-3 text-left">Triggered By</th>
-              <th className="py-2 px-3 text-left">Duration</th>
-              <th className="py-2 pl-3 text-right">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border/20">
-            {runs.map(r => (
-              <tr key={r.id} className="hover:bg-accent/10 transition-colors">
-                <td className="py-3 pr-3 font-mono font-semibold text-foreground">{r.id}</td>
-                <td className="py-3 px-3 font-medium text-foreground truncate max-w-[150px]">{r.workflow}</td>
-                <td className="py-3 px-3 text-muted-foreground">{r.triggeredBy}</td>
-                <td className="py-3 px-3 text-muted-foreground">{r.duration}</td>
-                <td className="py-3 pl-3 text-right">
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                    r.status === "SUCCESS" ? "bg-success/15 text-success" : "bg-destructive/15 text-destructive"
-                  }`}>{r.status}</span>
-                </td>
+      <h2 className="text-sm font-semibold mb-4">Recent Build Executions</h2>
+      {loading ? (
+        <div className="py-6 text-center text-xs text-muted-foreground">Loading build history...</div>
+      ) : builds.length === 0 ? (
+        <div className="py-6 text-center text-xs text-muted-foreground">No recent builds recorded.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs text-left">
+            <thead>
+              <tr className="border-b border-border/30 text-muted-foreground uppercase pb-2">
+                <th className="py-2 pr-3 text-left">Build</th>
+                <th className="py-2 px-3 text-left">Pipeline</th>
+                <th className="py-2 px-3 text-left">Commit</th>
+                <th className="py-2 px-3 text-left">Author</th>
+                <th className="py-2 pl-3 text-right">Status</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y divide-border/20">
+              {builds.map((b) => (
+                <tr key={b.id} className="hover:bg-accent/10 transition-colors">
+                  <td className="py-3 pr-3 font-mono font-semibold text-foreground">#{b.buildNumber}</td>
+                  <td className="py-3 px-3 font-medium text-foreground truncate max-w-[150px]">{b.pipelineName}</td>
+                  <td className="py-3 px-3 font-mono text-muted-foreground">{b.commitHash ? b.commitHash.substring(0, 7) : "—"}</td>
+                  <td className="py-3 px-3 text-muted-foreground">{b.author || "System"}</td>
+                  <td className="py-3 pl-3 text-right">
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                        b.status === "SUCCESS"
+                          ? "bg-success/15 text-success"
+                          : b.status === "FAILED"
+                            ? "bg-destructive/15 text-destructive"
+                            : b.status === "RUNNING"
+                              ? "bg-primary-soft text-primary"
+                              : "bg-warning/15 text-warning"
+                      }`}
+                    >
+                      {b.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

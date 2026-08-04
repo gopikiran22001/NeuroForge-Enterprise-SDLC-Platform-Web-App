@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { projectService, userService, teamService } from "@/services/api-services";
+import { projectService, userService, teamService, scmConnectionService } from "@/services/api-services";
 import { mapBackendProjectToFrontend } from "@/components/dashboard/active-projects-table";
 import { useSession } from "@/lib/session";
 import { toast } from "sonner";
@@ -47,6 +47,7 @@ function ProjectList() {
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
   const [teams, setTeams] = useState([]);
+  const [scmConnections, setScmConnections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -55,6 +56,10 @@ function ProjectList() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
   const [formLoading, setFormLoading] = useState(false);
+  // Repository metadata state
+  const [repositoryUrl, setRepositoryUrl] = useState("");
+  const [repositoryProvider, setRepositoryProvider] = useState("GITHUB");
+  const [defaultBranch, setDefaultBranch] = useState("main");
 
   // Delete state
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -71,7 +76,7 @@ function ProjectList() {
   const [status, setStatus] = useState("ACTIVE");
   const [teamSearch, setTeamSearch] = useState("");
 
-  const canEdit = currentUser?.role === "admin";
+  const canEdit = currentUser?.role === "admin" || currentUser?.role === "super_admin";
 
   const fetchProjects = async () => {
     setLoading(true);
@@ -82,16 +87,17 @@ function ProjectList() {
           status: statusFilter !== "ALL" ? statusFilter : undefined,
           size: 100,
         }),
-        userService.search({ role: "PROJECT_MANAGER", size: 100 }),
-        teamService.search({ size: 100 }),
+        userService.search({ role: "PROJECT_MANAGER", size: 100 }).catch(() => ({ content: [] })),
+        teamService.search({ size: 100 }).catch(() => ({ content: [] })),
       ]);
-      const mapped = (projRes.content || []).map(mapBackendProjectToFrontend);
+      const content = projRes.content || [];
+      const mapped = content.map((p) => mapBackendProjectToFrontend(p));
       setProjects(mapped);
-      setUsers((usersRes.content || []).filter((u) => u.role === "PROJECT_MANAGER"));
+      setUsers(usersRes.content || []);
       setTeams(teamsRes.content || []);
     } catch (err) {
-      console.error("Failed to fetch projects data:", err);
-      toast.error("Failed to load projects data");
+      console.error("Failed to fetch projects:", err);
+      toast.error("Failed to load projects");
     } finally {
       setLoading(false);
     }
@@ -111,6 +117,9 @@ function ProjectList() {
     setSelectedTeams([]);
     setStatus("ACTIVE");
     setTeamSearch("");
+    setRepositoryUrl("");
+    setRepositoryProvider("GITHUB");
+    setDefaultBranch("main");
     setDialogOpen(true);
   };
 
@@ -124,6 +133,9 @@ function ProjectList() {
     setSelectedTeams(Array.from(original.teamIds || []));
     setStatus(original.status || "ACTIVE");
     setTeamSearch("");
+    setRepositoryUrl(original.repositoryUrl || "");
+    setRepositoryProvider(original.repositoryProvider || "GITHUB");
+    setDefaultBranch(original.defaultBranch || "main");
     setDialogOpen(true);
   };
 
@@ -150,6 +162,9 @@ function ProjectList() {
         projectManagerId,
         teamIds: selectedTeams,
         status,
+        repositoryUrl: repositoryUrl || null,
+        repositoryProvider: repositoryProvider || "GITHUB",
+        defaultBranch: defaultBranch || "main",
       };
 
       if (editingProject) {
@@ -424,6 +439,49 @@ function ProjectList() {
                     <SelectItem value="CANCELLED">CANCELLED</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            {/* Repository Information (Informational Metadata) */}
+            <div className="space-y-3 pt-2 border-t hairline">
+              <div className="text-xs font-semibold text-foreground">Repository Metadata</div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="repositoryProvider">Provider</Label>
+                  <Select value={repositoryProvider} onValueChange={setRepositoryProvider} disabled={formLoading}>
+                    <SelectTrigger className="bg-background">
+                      <SelectValue placeholder="Select provider" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="GITHUB">GitHub</SelectItem>
+                      <SelectItem value="GITLAB">GitLab</SelectItem>
+                      <SelectItem value="BITBUCKET">Bitbucket</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="defaultBranch">Default Branch</Label>
+                  <Input
+                    id="defaultBranch"
+                    placeholder="e.g. main"
+                    value={defaultBranch}
+                    onChange={(e) => setDefaultBranch(e.target.value)}
+                    disabled={formLoading}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="repositoryUrl">Repository URL</Label>
+                <Input
+                  id="repositoryUrl"
+                  placeholder="https://github.com/organization/repository"
+                  value={repositoryUrl}
+                  onChange={(e) => setRepositoryUrl(e.target.value)}
+                  disabled={formLoading}
+                />
               </div>
             </div>
 
