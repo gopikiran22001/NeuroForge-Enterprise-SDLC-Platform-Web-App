@@ -293,3 +293,10 @@ export const deploymentService = {
   getStats: () => api.get("/api/deployments/stats"),
 };
 
+// ─── Dashboard Service ─────────────────────────────────────────
+export const dashboardService = {
+  getStats: (projectId) =>
+    api.get(`/api/dashboard/stats${projectId ? "?projectId=" + projectId : ""}`),
+};
+
+
