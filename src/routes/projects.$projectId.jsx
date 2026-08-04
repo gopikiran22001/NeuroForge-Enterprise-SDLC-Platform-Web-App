@@ -24,6 +24,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
+import { ConfirmationDialog } from "@/components/shared/confirmation-dialog";
+
 const PROJECT_STATUSES = ["PLANNING", "ACTIVE", "ON_HOLD", "COMPLETED", "CANCELLED"];
 
 export const Route = createFileRoute("/projects/$projectId")({
@@ -75,7 +78,7 @@ export const Route = createFileRoute("/projects/$projectId")({
 });
 
 function ProjectDetail() {
-  const { rawProject, project, sprints, milestones, users, teams } = Route.useLoaderData();
+  const { rawProject, project, sprints, milestones, users, teams, pipelines = [], builds = [], deployments = [] } = Route.useLoaderData();
   const { user: currentUser } = useSession();
   const navigate = useNavigate();
   const router = useRouter();
