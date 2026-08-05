@@ -286,6 +286,13 @@ export function IntegrationsPage() {
     fetchRepositories(integration.id, 0, "");
   };
 
+  const handleRepoSearchSubmit = (e) => {
+    e.preventDefault();
+    if (!selectedIntegration) return;
+    setRepoPage(0);
+    fetchRepositories(selectedIntegration.id, 0, repoSearch);
+  };
+
   const openCreateDialog = () => {
     setEditingItem(null);
     setConnectionName("");
