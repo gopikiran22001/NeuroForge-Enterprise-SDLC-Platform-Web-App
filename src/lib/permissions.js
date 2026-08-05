@@ -94,13 +94,14 @@ export function can(role, action) {
 // ─── Sidebar module visibility per role ──────────────────────
 // Each entry maps to a route URL used by the sidebar
 const SIDEBAR_VISIBILITY = {
-  super_admin: ["/", "/organizations"],
+  super_admin: ["/", "/organizations", "/integrations"],
   admin: [
     "/",
     "/projects",
     "/sprints",
     "/milestones",
     "/tasks",
+    "/integrations",
     "/repositories",
     "/pipelines",
     "/releases",
@@ -119,6 +120,7 @@ const SIDEBAR_VISIBILITY = {
     "/sprints",
     "/milestones",
     "/tasks",
+    "/integrations",
     "/teams",
     "/reports",
     "/settings",
@@ -129,6 +131,7 @@ const SIDEBAR_VISIBILITY = {
     "/sprints",
     "/milestones",
     "/tasks",
+    "/integrations",
     "/repositories",
     "/pipelines",
     "/settings",
@@ -147,6 +150,7 @@ const SIDEBAR_VISIBILITY = {
     "/projects",
     "/sprints",
     "/milestones",
+    "/integrations",
     "/pipelines",
     "/releases",
     "/deployments",

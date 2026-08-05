@@ -9,7 +9,8 @@ import { MilestoneTimeline } from "@/components/dashboard/milestone-timeline";
 import { QuickActions } from "@/components/dashboard/quick-actions";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { organizationService, userService, pipelineService, buildService, deploymentService } from "@/services/api-services";
+import { organizationService, userService, pipelineService, buildService, deploymentService, analyticsService } from "@/services/api-services";
+import { Download, Workflow, GitPullRequest, GitCommit, Tag, BarChart2, TrendingUp, ExternalLink } from "lucide-react";
 import {
   ArrowRight,
   ShieldCheck,
@@ -507,6 +508,7 @@ function Dashboard() {
   const [projects, setProjects] = useState([]);
   const [pendingOrgs, setPendingOrgs] = useState([]);
   const [pendingUsers, setPendingUsers] = useState([]);
+  const [sdlcAnalytics, setSdlcAnalytics] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
 
   const hour = new Date().getHours();
@@ -526,6 +528,11 @@ function Dashboard() {
 
   const fetchData = async () => {
     try {
+      // Fetch SDLC Analytics for Organization Executive Cockpit
+      analyticsService.getOrganizationDashboard()
+        .then((data) => setSdlcAnalytics(data))
+        .catch((err) => console.warn("Failed to fetch organization SDLC analytics:", err));
+
       if (userRole === "super_admin") {
         const [orgsData, usersData, projData, pendingUsersData] = await Promise.all([
           fetchPageOrCatch("/api/organizations?size=100"),
@@ -886,6 +893,10 @@ function Dashboard() {
     }
   };
 
+  const handleExportCsv = () => {
+    window.open("/api/analytics/export", "_blank");
+  };
+
   return (
     <div className="p-6 md:p-8 max-w-[1600px] mx-auto space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-6">
@@ -900,10 +911,182 @@ function Dashboard() {
             {fmtDate(new Date(), "EEEE, d MMMM yyyy")}
           </p>
         </div>
-        <QuickActions />
+
+        <div className="flex items-center gap-3">
+          <Button variant="outline" size="sm" className="gap-2 text-xs h-9" onClick={handleExportCsv}>
+            <Download className="size-4 text-primary" /> Export SDLC Report (CSV)
+          </Button>
+          <QuickActions />
+        </div>
       </div>
 
+      {/* Enterprise SDLC Executive KPI Banner */}
+      {sdlcAnalytics && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+              <BarChart2 className="size-4 text-primary" /> Enterprise SDLC Analytics
+            </h2>
+            <span className="text-xs text-muted-foreground font-mono">
+              Live GitHub Data Sync
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+            <div className="p-4 bg-card border hairline rounded-xl space-y-1">
+              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                <Globe className="size-3 text-primary" /> Repositories
+              </span>
+              <p className="font-display text-2xl font-semibold text-foreground">
+                {sdlcAnalytics.totalRepositories ?? 0}
+              </p>
+            </div>
+
+            <div className="p-4 bg-card border hairline rounded-xl space-y-1">
+              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                <Workflow className="size-3 text-primary" /> Total Runs
+              </span>
+              <p className="font-display text-2xl font-semibold text-foreground">
+                {sdlcAnalytics.totalWorkflowRuns ?? 0}
+              </p>
+            </div>
+
+            <div className="p-4 bg-card border hairline rounded-xl space-y-1">
+              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                <TrendingUp className="size-3 text-success" /> Success Rate
+              </span>
+              <p className="font-display text-2xl font-semibold text-success">
+                {sdlcAnalytics.successRate != null ? `${sdlcAnalytics.successRate}%` : "—"}
+              </p>
+            </div>
+
+            <div className="p-4 bg-card border hairline rounded-xl space-y-1">
+              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                <Clock className="size-3 text-muted-foreground" /> Avg Duration
+              </span>
+              <p className="font-display text-2xl font-semibold text-foreground">
+                {sdlcAnalytics.averageWorkflowDurationSeconds ? `${Math.round(sdlcAnalytics.averageWorkflowDurationSeconds)}s` : "—"}
+              </p>
+            </div>
+
+            <div className="p-4 bg-card border hairline rounded-xl space-y-1">
+              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                <GitPullRequest className="size-3 text-primary" /> Open PRs
+              </span>
+              <p className="font-display text-2xl font-semibold text-foreground">
+                {sdlcAnalytics.openPullRequests ?? 0}
+              </p>
+            </div>
+
+            <div className="p-4 bg-card border hairline rounded-xl space-y-1">
+              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                <Tag className="size-3 text-primary" /> Latest Releases
+              </span>
+              <p className="font-display text-2xl font-semibold text-foreground">
+                {sdlcAnalytics.latestReleases?.length ?? 0}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {renderKpiAndPanels()}
+
+      {/* Unified Activity Feed & Top Contributors Widget */}
+      {sdlcAnalytics && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Unified Activity Feed */}
+          <div className="lg:col-span-2 p-5 bg-card border hairline rounded-xl space-y-4">
+            <div className="flex items-center justify-between border-b hairline pb-3">
+              <h2 className="text-sm font-semibold flex items-center gap-2">
+                <Activity className="size-4 text-primary" /> Unified SDLC Activity Feed
+              </h2>
+              <span className="text-[11px] text-muted-foreground">Newest first</span>
+            </div>
+
+            {sdlcAnalytics.recentActivity && sdlcAnalytics.recentActivity.length > 0 ? (
+              <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+                {sdlcAnalytics.recentActivity.map((item) => (
+                  <div key={item.id} className="p-3 bg-muted/20 border hairline rounded-lg flex items-center justify-between text-xs hover:bg-muted/40 transition-colors">
+                    <div className="flex items-center gap-3">
+                      {item.type === "WORKFLOW_RUN" && <Workflow className="size-4 text-primary shrink-0" />}
+                      {item.type === "PULL_REQUEST" && <GitPullRequest className="size-4 text-warning shrink-0" />}
+                      {item.type === "RELEASE" && <Tag className="size-4 text-success shrink-0" />}
+                      {item.type === "COMMIT" && <GitCommit className="size-4 text-muted-foreground shrink-0" />}
+                      <div>
+                        <p className="font-semibold text-foreground truncate max-w-md">{item.title}</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">{item.subtitle} • by @{item.actor}</p>
+                      </div>
+                    </div>
+                    {item.url && (
+                      <a href={item.url} target="_blank" rel="noreferrer">
+                        <Button variant="ghost" size="icon" className="size-7" title="Open in GitHub">
+                          <ExternalLink className="size-3.5" />
+                        </Button>
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-8 text-center text-xs text-muted-foreground italic">
+                No recent activity recorded yet. Connect a GitHub repository to stream activities.
+              </div>
+            )}
+          </div>
+
+          {/* Top Contributors & Releases Widget */}
+          <div className="space-y-6">
+            <div className="p-5 bg-card border hairline rounded-xl space-y-4">
+              <h2 className="text-sm font-semibold flex items-center gap-2 border-b hairline pb-3">
+                <Users className="size-4 text-primary" /> Top Contributors
+              </h2>
+              {sdlcAnalytics.topContributors && sdlcAnalytics.topContributors.length > 0 ? (
+                <div className="space-y-2.5">
+                  {sdlcAnalytics.topContributors.slice(0, 5).map((c) => (
+                    <div key={c.username} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        {c.avatarUrl && <img src={c.avatarUrl} alt="" className="size-5 rounded-full" />}
+                        <span className="font-medium text-foreground">@{c.username}</span>
+                      </div>
+                      <span className="font-mono text-[11px] text-muted-foreground">{c.contributions} commits</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">No contributor metrics collected yet.</p>
+              )}
+            </div>
+
+            <div className="p-5 bg-card border hairline rounded-xl space-y-4">
+              <h2 className="text-sm font-semibold flex items-center gap-2 border-b hairline pb-3">
+                <Tag className="size-4 text-success" /> Latest Releases
+              </h2>
+              {sdlcAnalytics.latestReleases && sdlcAnalytics.latestReleases.length > 0 ? (
+                <div className="space-y-2.5">
+                  {sdlcAnalytics.latestReleases.slice(0, 3).map((r) => (
+                    <div key={r.id} className="flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-semibold text-foreground">{r.version}</span>
+                        <p className="text-[11px] text-muted-foreground truncate max-w-[180px]">{r.name || r.tagName}</p>
+                      </div>
+                      {r.url && (
+                        <a href={r.url} target="_blank" rel="noreferrer">
+                          <Button variant="ghost" size="icon" className="size-6">
+                            <ExternalLink className="size-3" />
+                          </Button>
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">No releases published yet.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {userRole !== "super_admin" && (
         <div className="grid grid-cols-1 gap-4">

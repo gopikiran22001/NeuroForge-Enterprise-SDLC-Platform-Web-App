@@ -25,6 +25,7 @@ import { Route as OrganizationsRouteImport } from './routes/organizations'
 import { Route as MonitoringRouteImport } from './routes/monitoring'
 import { Route as MilestonesRouteImport } from './routes/milestones'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as IntegrationsRouteImport } from './routes/integrations'
 import { Route as DeploymentsRouteImport } from './routes/deployments'
 import { Route as AuditLogRouteImport } from './routes/audit-log'
 import { Route as IndexRouteImport } from './routes/index'
@@ -111,6 +112,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 })
+const IntegrationsRoute = IntegrationsRouteImport.update({
+  id: '/integrations',
+  path: '/integrations',
+  getParentRoute: () => rootRouteImport,
+})
 const DeploymentsRoute = DeploymentsRouteImport.update({
   id: '/deployments',
   path: '/deployments',
@@ -150,6 +156,7 @@ const rootRouteChildren = {
   IndexRoute: IndexRoute,
   AuditLogRoute: AuditLogRoute,
   DeploymentsRoute: DeploymentsRoute,
+  IntegrationsRoute: IntegrationsRoute,
   LoginRoute: LoginRoute,
   MilestonesRoute: MilestonesRoute,
   MonitoringRoute: MonitoringRoute,

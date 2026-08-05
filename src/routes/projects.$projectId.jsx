@@ -1,11 +1,11 @@
 import { createFileRoute, Link, notFound, useRouter, useNavigate } from "@tanstack/react-router";
-import { ChevronLeft, GitBranch, Users, Calendar, Layers, Edit2, Trash2, Loader2, ExternalLink, Workflow, Server } from "lucide-react";
+import { ChevronLeft, GitBranch, Users, Calendar, Layers, Edit2, Trash2, Loader2, ExternalLink, Workflow, Github, GitPullRequest, Tag, Star, Clock, FileCode2, Scale } from "lucide-react";
 import { fmtDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
-import { projectService, teamService, userService, sprintService, milestoneService, pipelineService, buildService, deploymentService } from "@/services/api-services";
+import { projectService, teamService, userService, sprintService, milestoneService, pipelineService, githubIntegrationService } from "@/services/api-services";
 import { mapBackendProjectToFrontend } from "@/components/dashboard/active-projects-table";
 import { useSession } from "@/lib/session";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -32,15 +32,14 @@ const PROJECT_STATUSES = ["PLANNING", "ACTIVE", "ON_HOLD", "COMPLETED", "CANCELL
 export const Route = createFileRoute("/projects/$projectId")({
   loader: async ({ params }) => {
     try {
-      const [p, sprintsRes, milestonesRes, usersRes, teamsRes, pipelinesRes, buildsRes, deploymentsRes] = await Promise.all([
+      const [p, sprintsRes, milestonesRes, usersRes, teamsRes, pipelinesRes, ghDashboardRes] = await Promise.all([
         projectService.getById(params.projectId),
         sprintService.search({ projectId: params.projectId, size: 100 }).catch(() => ({ content: [] })),
         milestoneService.search({ projectId: params.projectId, size: 100 }).catch(() => ({ content: [] })),
         userService.search({ size: 100 }).catch(() => ({ content: [] })),
         teamService.search({ size: 100 }).catch(() => ({ content: [] })),
         pipelineService.search({ projectId: params.projectId, size: 100 }).catch(() => ({ content: [] })),
-        buildService.search({ size: 100 }).catch(() => ({ content: [] })),
-        deploymentService.search({ size: 100 }).catch(() => ({ content: [] })),
+        projectService.getGitHubDashboard(params.projectId).catch(() => null),
       ]);
 
       const project = mapBackendProjectToFrontend(p);
@@ -54,8 +53,7 @@ export const Route = createFileRoute("/projects/$projectId")({
         users: usersRes?.content || [],
         teams: teamsRes?.content || [],
         pipelines: pipelinesRes?.content || [],
-        builds: (buildsRes?.content || []).filter(b => b.projectId === params.projectId),
-        deployments: (deploymentsRes?.content || []).filter(d => d.projectId === params.projectId),
+        ghDashboard: ghDashboardRes || null,
       };
     } catch (err) {
       console.error("Failed to load project details:", err);
@@ -64,10 +62,10 @@ export const Route = createFileRoute("/projects/$projectId")({
   },
   head: ({ loaderData }) => ({
     meta: [
-      { title: `${loaderData?.project?.name ?? "Project"} · NeuroForge Nexus` },
+      { title: `${loaderData?.project?.name ?? "Project"} · NeuroForge Platform` },
       {
         name: "description",
-        content: `Details, sprints, releases and team for ${loaderData?.project?.name}.`,
+        content: `Details, GitHub repository, workflows, and team for ${loaderData?.project?.name}.`,
       },
     ],
   }),
@@ -78,7 +76,7 @@ export const Route = createFileRoute("/projects/$projectId")({
 });
 
 function ProjectDetail() {
-  const { rawProject, project, sprints, milestones, users, teams, pipelines = [], builds = [], deployments = [] } = Route.useLoaderData();
+  const { rawProject, project, sprints, milestones, users, teams, pipelines = [], ghDashboard } = Route.useLoaderData();
   const { user: currentUser } = useSession();
   const navigate = useNavigate();
   const router = useRouter();
@@ -97,9 +95,6 @@ function ProjectDetail() {
   const [projectManagerId, setProjectManagerId] = useState("");
   const [selectedTeams, setSelectedTeams] = useState([]);
   const [status, setStatus] = useState("ACTIVE");
-  const [repositoryUrl, setRepositoryUrl] = useState("");
-  const [repositoryProvider, setRepositoryProvider] = useState("GITHUB");
-  const [defaultBranch, setDefaultBranch] = useState("main");
 
   const canEdit = currentUser?.role === "admin" || currentUser?.role === "super_admin";
 
@@ -107,7 +102,7 @@ function ProjectDetail() {
   const projectTeamIds = rawProject.teamIds ? Array.from(rawProject.teamIds) : [];
   const assignedTeams = teams.filter((t) => projectTeamIds.includes(t.id));
 
-  // Collect unique user IDs assigned to this project (from team member list, team leader, and project manager)
+  // Collect unique user IDs assigned to this project
   const assignedUserIds = new Set();
   assignedTeams.forEach((t) => {
     if (t.memberIds) {
@@ -121,7 +116,6 @@ function ProjectDetail() {
     assignedUserIds.add(rawProject.projectManagerId);
   }
 
-  // Map user IDs to user objects
   const assignedUsers = Array.from(assignedUserIds)
     .map((uid) => {
       const u = users.find((user) => user.id === uid);
@@ -135,22 +129,6 @@ function ProjectDetail() {
           isLeader: assignedTeams.some((t) => t.teamLeaderId === uid),
         };
       }
-      const teamLead = assignedTeams.find((t) => t.teamLeaderId === uid);
-      if (teamLead && teamLead.teamLeaderEmail) {
-        const derivedName = teamLead.teamLeaderEmail
-          .split("@")[0]
-          .split(".")
-          .map((n) => n.charAt(0).toUpperCase() + n.slice(1))
-          .join(" ");
-        return {
-          id: uid,
-          name: derivedName,
-          email: teamLead.teamLeaderEmail,
-          role: "DEVELOPER",
-          isPm: uid === rawProject.projectManagerId,
-          isLeader: true,
-        };
-      }
       return null;
     })
     .filter(Boolean);
@@ -158,70 +136,7 @@ function ProjectDetail() {
   const getDisplayRole = (u) => {
     if (u.isPm) return "Project Manager";
     if (u.isLeader) return "Team Leader";
-    if (!u.role) return "Engineer";
-    switch (u.role.toUpperCase()) {
-      case "ADMIN":
-        return "Administrator";
-      case "PROJECT_MANAGER":
-        return "Project Manager";
-      case "DEVELOPER":
-        return "Software Engineer";
-      case "TESTER":
-        return "Tester";
-      case "DEVOPS_ENGINEER":
-        return "DevOps Engineer";
-      default:
-        return "Engineer";
-    }
-  };
-
-  const handleOpenEdit = () => {
-    setName(rawProject.name || "");
-    setCode(rawProject.code || "");
-    setDescription(rawProject.description || "");
-    setStartDate(rawProject.startDate ? rawProject.startDate.split("T")[0] : "");
-    setEndDate(rawProject.endDate ? rawProject.endDate.split("T")[0] : "");
-    setProjectManagerId(rawProject.projectManagerId || "");
-    setSelectedTeams(rawProject.teamIds ? Array.from(rawProject.teamIds) : []);
-    setStatus(rawProject.status || "ACTIVE");
-    setRepositoryUrl(rawProject.repositoryUrl || "");
-    setRepositoryProvider(rawProject.repositoryProvider || "GITHUB");
-    setDefaultBranch(rawProject.defaultBranch || "main");
-    setEditOpen(true);
-  };
-
-  const handleToggleTeam = (teamId) => {
-    setSelectedTeams((prev) =>
-      prev.includes(teamId) ? prev.filter((id) => id !== teamId) : [...prev, teamId]
-    );
-  };
-
-  const handleSave = async (e) => {
-    e.preventDefault();
-    setFormLoading(true);
-    try {
-      const payload = {
-        name,
-        code,
-        description,
-        startDate: startDate ? new Date(startDate).toISOString() : null,
-        endDate: endDate ? new Date(endDate).toISOString() : null,
-        projectManagerId: projectManagerId || null,
-        teamIds: selectedTeams,
-        status,
-        repositoryUrl: repositoryUrl || null,
-        repositoryProvider: repositoryProvider || "GITHUB",
-        defaultBranch: defaultBranch || "main",
-      };
-      await projectService.update(rawProject.id, payload);
-      toast.success("Project updated successfully");
-      setEditOpen(false);
-      router.invalidate();
-    } catch (err) {
-      toast.error(err.message || "Failed to update project");
-    } finally {
-      setFormLoading(false);
-    }
+    return "Engineer";
   };
 
   const handleDelete = async () => {
@@ -238,8 +153,11 @@ function ProjectDetail() {
     }
   };
 
+  const repoUrl = rawProject.repositoryUrl || ghDashboard?.repositoryUrl;
+  const repoFullName = rawProject.repositoryFullName || ghDashboard?.repositoryFullName;
+
   return (
-    <div className="p-6 md:p-8 max-w-[1400px] mx-auto">
+    <div className="p-6 md:p-8 max-w-[1400px] mx-auto space-y-6">
       <Link
         to="/projects"
         className="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground"
@@ -247,70 +165,157 @@ function ProjectDetail() {
         <ChevronLeft className="size-3.5" /> All projects
       </Link>
 
-      <header className="mt-3 flex flex-wrap items-end justify-between gap-4 pb-6 border-b hairline">
+      <header className="flex flex-wrap items-end justify-between gap-4 pb-6 border-b hairline">
         <div className="flex items-start gap-4">
-          <div className="grid size-14 place-items-center rounded-xl bg-primary-soft text-primary text-lg font-semibold">
-            {project.key ? project.key.charAt(0) : ""}
+          <div className="grid size-14 place-items-center rounded-xl bg-primary-soft text-primary text-lg font-semibold shrink-0">
+            {project.key ? project.key.charAt(0) : "P"}
           </div>
           <div>
             <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-              Project · {project.key}
+              GitHub-Backed Project · {project.key}
             </div>
-            <h1 className="font-display text-3xl mt-1">{project.name}</h1>
-            <p className="mt-1 text-sm text-muted-foreground tnum">
-              PM {project.pm} · Sprint {project.sprint} · Release v{project.release}
+            <h1 className="font-display text-3xl mt-1 flex items-center gap-2.5">
+              {project.name}
+            </h1>
+            <p className="mt-1 text-xs text-muted-foreground font-mono flex items-center gap-2">
+              <Github className="size-3.5 text-foreground" />
+              Repository: <span className="text-foreground font-semibold">{repoFullName || "Not Configured"}</span>
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {canEdit && (
+
+        {/* Quick Links Header Buttons */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {repoUrl && (
             <>
-              <Button variant="outline" size="sm" onClick={handleOpenEdit}>
-                <Edit2 className="size-3.5 mr-1" /> Edit
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => setDeleteOpen(true)}
-              >
-                <Trash2 className="size-3.5 mr-1" /> Delete
-              </Button>
+              <a href={repoUrl} target="_blank" rel="noreferrer">
+                <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+                  <Github className="size-3.5 text-foreground" /> Repository <ExternalLink className="size-3" />
+                </Button>
+              </a>
+              <a href={`${repoUrl}/actions`} target="_blank" rel="noreferrer">
+                <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+                  <Workflow className="size-3.5 text-primary" /> Actions <ExternalLink className="size-3" />
+                </Button>
+              </a>
+              <a href={`${repoUrl}/pulls`} target="_blank" rel="noreferrer">
+                <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+                  <GitPullRequest className="size-3.5 text-success" /> Pull Requests <ExternalLink className="size-3" />
+                </Button>
+              </a>
+              <a href={`${repoUrl}/releases`} target="_blank" rel="noreferrer">
+                <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+                  <Tag className="size-3.5 text-warning" /> Releases <ExternalLink className="size-3" />
+                </Button>
+              </a>
             </>
           )}
-          <Link to="/sprints" search={{ projectId: rawProject.id }}>
-            <Button size="sm">Open sprint board</Button>
-          </Link>
+
+          {canEdit && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive h-8 text-xs"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 className="size-3.5 mr-1" /> Delete
+            </Button>
+          )}
         </div>
       </header>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
-        <Stat icon={Users} label="Members" value={String(assignedUsers.length || project.members)} />
-        <Stat icon={Layers} label="Open tasks" value={String(project.tasks)} />
-        <Stat icon={GitBranch} label="Release" value={`v${project.release}`} mono />
-        <Stat icon={Calendar} label="Due" value={fmtDate(project.due)} />
+      {/* GitHub Repository Health & Dashboard Metrics Bar */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="p-4 bg-card border hairline rounded-xl space-y-1">
+          <span className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+            <GitPullRequest className="size-3.5 text-success" /> Open Pull Requests
+          </span>
+          <p className="font-display text-2xl font-semibold text-foreground">
+            {ghDashboard?.openPullRequestsCount ?? 0}
+          </p>
+        </div>
+        <div className="p-4 bg-card border hairline rounded-xl space-y-1">
+          <span className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+            <Users className="size-3.5 text-primary" /> Contributors
+          </span>
+          <p className="font-display text-2xl font-semibold text-foreground">
+            {ghDashboard?.contributorCount ?? 0}
+          </p>
+        </div>
+        <div className="p-4 bg-card border hairline rounded-xl space-y-1">
+          <span className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+            <GitBranch className="size-3.5 text-primary" /> Default Branch
+          </span>
+          <p className="font-mono text-base font-semibold text-foreground truncate">
+            {rawProject.defaultBranch || ghDashboard?.defaultBranch || "main"}
+          </p>
+        </div>
+        <div className="p-4 bg-card border hairline rounded-xl space-y-1">
+          <span className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+            <Workflow className="size-3.5 text-primary" /> GitHub Workflow
+          </span>
+          <p className="font-medium text-xs text-foreground truncate">
+            {rawProject.workflowName || ghDashboard?.workflowName || "None"}
+          </p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-6">
-        <div className="lg:col-span-2 space-y-4">
-          {/* Progress Card */}
-          <div className="rounded-xl border hairline bg-card p-6">
-            <h2 className="text-sm font-semibold">Progress</h2>
-            <div className="mt-4">
-              <div className="flex justify-between text-[11px] text-muted-foreground mb-1.5">
-                <span>Sprint {project.sprint}</span>
-                <span className="tnum">{project.progress}%</span>
-              </div>
-              <div className="h-2 rounded-full bg-muted overflow-hidden">
-                <div
-                  className={cn("h-full rounded-full", {
-                    "bg-success": project.health === "healthy",
-                    "bg-warning": project.health === "at_risk",
-                    "bg-destructive": project.health === "blocked",
-                  })}
-                  style={{ width: `${project.progress}%` }}
-                />
-              </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+
+          {/* GitHub Latest Activity Cards (Commit & Release) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Latest Commit Card */}
+            <div className="p-5 bg-card border hairline rounded-xl space-y-3">
+              <h3 className="font-semibold text-xs text-foreground uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 border-b hairline pb-2">
+                <Clock className="size-3.5 text-primary" /> Latest Commit
+              </h3>
+              {ghDashboard?.latestCommit ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-foreground line-clamp-2">
+                    {ghDashboard.latestCommit.message}
+                  </p>
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1">
+                    <span className="font-mono text-primary font-semibold">
+                      {ghDashboard.latestCommit.shortSha}
+                    </span>
+                    <span>{ghDashboard.latestCommit.authorName}</span>
+                    <span>{ghDashboard.latestCommit.commitDate ? fmtDate(ghDashboard.latestCommit.commitDate) : ""}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-xs text-muted-foreground italic py-2">
+                  No commit data fetched yet.
+                </div>
+              )}
+            </div>
+
+            {/* Latest Release Card */}
+            <div className="p-5 bg-card border hairline rounded-xl space-y-3">
+              <h3 className="font-semibold text-xs text-foreground uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 border-b hairline pb-2">
+                <Tag className="size-3.5 text-warning" /> Latest Release
+              </h3>
+              {ghDashboard?.latestRelease ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold bg-primary/10 text-primary px-2 py-0.5 rounded border border-primary/20">
+                      {ghDashboard.latestRelease.version}
+                    </span>
+                    <span className="text-xs font-semibold text-foreground truncate">{ghDashboard.latestRelease.name}</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground line-clamp-2">
+                    {ghDashboard.latestRelease.description || "No release notes."}
+                  </p>
+                  <div className="text-[10px] text-muted-foreground pt-1 flex justify-between">
+                    <span>By @{ghDashboard.latestRelease.author}</span>
+                    <span>{ghDashboard.latestRelease.publishedAt ? fmtDate(ghDashboard.latestRelease.publishedAt) : ""}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-xs text-muted-foreground italic py-2">
+                  No releases found on GitHub.
+                </div>
+              )}
             </div>
           </div>
 
@@ -346,18 +351,7 @@ function ProjectDetail() {
                           {fmtDate(s.startDate)} - {fmtDate(s.endDate)}
                         </td>
                         <td className="py-2.5 text-right">
-                          <span
-                            className={cn(
-                              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
-                              s.status === "ACTIVE"
-                                ? "bg-success/10 text-success"
-                                : s.status === "COMPLETED"
-                                  ? "bg-muted text-muted-foreground"
-                                  : s.status === "CANCELLED"
-                                    ? "bg-destructive/10 text-destructive"
-                                    : "bg-primary-soft text-primary"
-                            )}
-                          >
+                          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-primary-soft text-primary">
                             {s.status}
                           </span>
                         </td>
@@ -368,60 +362,37 @@ function ProjectDetail() {
               </div>
             )}
           </div>
-
-          {/* Milestones Card */}
-          <div className="rounded-xl border hairline bg-card p-6">
-            <h2 className="text-sm font-semibold flex items-center justify-between">
-              <span>Milestones</span>
-              <span className="text-[11px] font-normal text-muted-foreground">{milestones.length} total</span>
-            </h2>
-            {milestones.length === 0 ? (
-              <div className="mt-4 py-8 text-center text-xs text-muted-foreground border border-dashed rounded-lg hairline">
-                No milestones defined for this project.
-              </div>
-            ) : (
-              <div className="mt-4 space-y-3">
-                {milestones.map((m) => (
-                  <div
-                    key={m.id}
-                    className="flex items-start justify-between p-3 rounded-lg border hairline bg-background hover:border-primary/20 transition-colors"
-                  >
-                    <div>
-                      <h3 className="text-xs font-semibold">{m.name}</h3>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">{m.description || "No description."}</p>
-                      <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-2">
-                        <Calendar className="size-3" /> Due {fmtDate(m.dueDate)}
-                      </div>
-                    </div>
-                    <span
-                      className={cn(
-                        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
-                        m.status === "COMPLETED"
-                          ? "bg-success/10 text-success"
-                          : m.status === "IN_PROGRESS"
-                            ? "bg-primary-soft text-primary"
-                            : m.status === "ON_HOLD"
-                              ? "bg-warning/10 text-warning"
-                              : m.status === "CANCELLED"
-                                ? "bg-destructive/10 text-destructive"
-                                : "bg-muted text-muted-foreground"
-                      )}
-                    >
-                      {(m.status || "PLANNED").replace("_", " ")}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Sidebar cards */}
         <div className="space-y-4 self-start">
-          {/* Team list card */}
-          <div className="rounded-xl border hairline bg-card p-6">
-            <h2 className="text-sm font-semibold">Team</h2>
-            <div className="mt-4 space-y-2.5">
+          {/* GitHub Actions Workflow Configuration */}
+          <div className="rounded-xl border hairline bg-card p-5 space-y-3 text-xs">
+            <h3 className="font-semibold text-sm text-foreground uppercase tracking-wider text-muted-foreground border-b hairline pb-2 flex items-center gap-2">
+              <Workflow className="size-4 text-primary" /> Workflow Association
+            </h3>
+            <div className="space-y-2">
+              <div>
+                <span className="text-muted-foreground">Workflow Name:</span>
+                <p className="font-semibold text-foreground">{rawProject.workflowName || "None Associated"}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Workflow File:</span>
+                <p className="font-mono text-muted-foreground text-[11px]">{rawProject.workflowFile || "N/A"}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Provider:</span>
+                <p className="font-semibold text-foreground">GITHUB_ACTIONS</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Team Members Card */}
+          <div className="rounded-xl border hairline bg-card p-5 space-y-3">
+            <h3 className="font-semibold text-sm text-foreground uppercase tracking-wider text-muted-foreground border-b hairline pb-2 flex items-center gap-2">
+              <Users className="size-4 text-primary" /> Team Members ({assignedUsers.length})
+            </h3>
+            <div className="space-y-2.5">
               {assignedUsers.length === 0 ? (
                 <div className="text-xs text-muted-foreground text-center py-4">No assigned team members.</div>
               ) : (
@@ -435,7 +406,7 @@ function ProjectDetail() {
                         .join("")}
                     </div>
                     <div className="min-w-0">
-                      <div className="text-sm truncate font-medium">{u.name}</div>
+                      <div className="text-xs truncate font-semibold text-foreground">{u.name}</div>
                       <div className="text-[11px] text-muted-foreground">{getDisplayRole(u)}</div>
                     </div>
                   </div>
@@ -443,274 +414,19 @@ function ProjectDetail() {
               )}
             </div>
           </div>
-
-          {/* Repository Information Card */}
-          <div className="rounded-xl border hairline bg-card p-6 space-y-3">
-            <h2 className="text-sm font-semibold flex items-center justify-between">
-              <span>Source Repository</span>
-              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-primary-soft text-primary">
-                {rawProject.repositoryProvider || "GITHUB"}
-              </span>
-            </h2>
-            <div className="space-y-2 text-xs">
-              <div>
-                <div className="text-[10px] text-muted-foreground uppercase">Default Branch</div>
-                <div className="font-mono font-medium mt-0.5 text-foreground">{rawProject.defaultBranch || "main"}</div>
-              </div>
-              <div>
-                <div className="text-[10px] text-muted-foreground uppercase">Repository URL</div>
-                {rawProject.repositoryUrl ? (
-                  <a
-                    href={rawProject.repositoryUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-mono text-[11px] text-primary hover:underline inline-flex items-center gap-1 mt-0.5 truncate max-w-full"
-                  >
-                    <span className="truncate">{rawProject.repositoryUrl}</span>
-                    <ExternalLink className="size-3 shrink-0" />
-                  </a>
-                ) : (
-                  <div className="text-muted-foreground italic mt-0.5">Not configured</div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Pipelines Summary Card */}
-          <div className="rounded-xl border hairline bg-card p-6 space-y-3">
-            <h2 className="text-sm font-semibold flex items-center justify-between">
-              <span>Pipelines</span>
-              <span className="text-[11px] font-normal text-muted-foreground">{pipelines.length} configured</span>
-            </h2>
-            {pipelines.length === 0 ? (
-              <div className="text-xs text-muted-foreground text-center py-4 border border-dashed rounded-lg hairline">
-                No pipelines configured.
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {pipelines.map((pip) => (
-                  <div key={pip.id} className="p-2.5 rounded-lg border hairline bg-background flex items-center justify-between text-xs">
-                    <div>
-                      <div className="font-medium text-foreground">{pip.name}</div>
-                      <div className="text-[10px] text-muted-foreground font-mono">{pip.provider} · {pip.branch}</div>
-                    </div>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded font-mono bg-muted text-muted-foreground">
-                      {pip.lastRunStatus || "NEVER_RUN"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
       </div>
 
-      {/* Edit Dialog */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-md bg-card border hairline">
-          <DialogHeader>
-            <DialogTitle className="font-display text-xl">Edit Project</DialogTitle>
-          </DialogHeader>
-
-          <form onSubmit={handleSave} className="space-y-4">
-            <div className="grid grid-cols-3 gap-3">
-              <div className="col-span-2 space-y-1.5">
-                <Label htmlFor="name">Project Name</Label>
-                <Input
-                  id="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  disabled={formLoading}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="code">Code (Key)</Label>
-                <Input
-                  id="code"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.toUpperCase())}
-                  required
-                  disabled={formLoading}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="description">Description</Label>
-              <Input
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                disabled={formLoading}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="startDate">Start Date</Label>
-                <Input
-                  id="startDate"
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  required
-                  disabled={formLoading}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="endDate">End Date</Label>
-                <Input
-                  id="endDate"
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  disabled={formLoading}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="projectManager">Project Manager</Label>
-                <Select value={projectManagerId} onValueChange={setProjectManagerId} disabled={formLoading}>
-                  <SelectTrigger className="bg-background">
-                    <SelectValue placeholder="Select PM" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {users.map((u) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {u.firstName} {u.lastName} ({u.email})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="status">Status</Label>
-                <Select value={status} onValueChange={setStatus} disabled={formLoading}>
-                  <SelectTrigger className="bg-background">
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PROJECT_STATUSES.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Repository Metadata */}
-            <div className="space-y-3 pt-2 border-t hairline">
-              <div className="text-xs font-semibold text-foreground">Repository Metadata</div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="repositoryProvider">Provider</Label>
-                  <Select value={repositoryProvider} onValueChange={setRepositoryProvider} disabled={formLoading}>
-                    <SelectTrigger className="bg-background">
-                      <SelectValue placeholder="Select provider" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="GITHUB">GitHub</SelectItem>
-                      <SelectItem value="GITLAB">GitLab</SelectItem>
-                      <SelectItem value="BITBUCKET">Bitbucket</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="defaultBranch">Default Branch</Label>
-                  <Input
-                    id="defaultBranch"
-                    placeholder="e.g. main"
-                    value={defaultBranch}
-                    onChange={(e) => setDefaultBranch(e.target.value)}
-                    disabled={formLoading}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="repositoryUrl">Repository URL</Label>
-                <Input
-                  id="repositoryUrl"
-                  placeholder="https://github.com/organization/repository"
-                  value={repositoryUrl}
-                  onChange={(e) => setRepositoryUrl(e.target.value)}
-                  disabled={formLoading}
-                />
-              </div>
-            </div>
-
-            {/* Teams Checklist */}
-            <div className="space-y-2">
-              <Label>Assigned Teams</Label>
-              <div className="border hairline rounded-lg p-3 max-h-[140px] overflow-y-auto space-y-2 bg-background">
-                {teams.map((t) => (
-                  <div key={t.id} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`chk-t-${t.id}`}
-                      checked={selectedTeams.includes(t.id)}
-                      onCheckedChange={() => handleToggleTeam(t.id)}
-                      disabled={formLoading}
-                    />
-                    <label htmlFor={`chk-t-${t.id}`} className="text-xs cursor-pointer select-none">
-                      {t.name}
-                    </label>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <DialogFooter className="pt-4 border-t hairline mt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setEditOpen(false)}
-                disabled={formLoading}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={formLoading}>
-                {formLoading ? (
-                  <>
-                    Saving <Loader2 className="size-3.5 animate-spin ml-2" />
-                  </>
-                ) : (
-                  "Save changes"
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {/* Delete Confirmation Dialog */}
       <ConfirmationDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
-        title="Delete Project"
-        description={`Are you sure you want to delete ${rawProject.name}? This will permanently remove the project and all associated tasks/sprints.`}
-        confirmLabel="Delete"
+        title="Delete Project?"
+        description={`Are you sure you want to delete project "${project.name}"?`}
+        confirmLabel="Delete Project"
         loading={deleteLoading}
         onConfirm={handleDelete}
       />
-    </div>
-  );
-}
-
-function Stat({ icon: Icon, label, value, mono }) {
-  return (
-    <div className="rounded-xl border hairline bg-card p-4">
-      <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
-        <Icon className="size-3.5" /> {label}
-      </div>
-      <div className={cn("mt-2 text-xl", mono ? "font-mono" : "font-display")}>{value}</div>
     </div>
   );
 }

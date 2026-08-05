@@ -50,7 +50,7 @@ const NAV = [
   {
     label: "Engineering",
     items: [
-      { title: "Repositories", url: "/repositories", icon: GitBranch },
+      { title: "Integrations", url: "/integrations", icon: GitBranch },
       { title: "Pipelines", url: "/pipelines", icon: Workflow },
       { title: "Releases", url: "/releases", icon: Rocket },
       { title: "Deployments", url: "/deployments", icon: Server },

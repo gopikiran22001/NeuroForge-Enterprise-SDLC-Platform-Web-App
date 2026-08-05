@@ -1,6 +1,5 @@
 import { api } from "@/lib/api";
 
-// ─── Auth Service ─────────────────────────────────────────────
 export const authService = {
   login: (email, password) => api.post("/api/auth/login", { email, password }),
   register: (payload) => api.post("/api/auth/register", payload),
@@ -11,7 +10,6 @@ export const authService = {
     }),
 };
 
-// ─── User Service ─────────────────────────────────────────────
 export const userService = {
   getProfile: () => api.get("/api/users/profile"),
 
@@ -54,7 +52,6 @@ export const userService = {
   getStats: () => api.get("/api/users/stats"),
 };
 
-// ─── Project Service ──────────────────────────────────────────
 export const projectService = {
   search: ({ search, status, page = 0, size = 20 } = {}) => {
     const params = new URLSearchParams();
@@ -72,9 +69,10 @@ export const projectService = {
   update: (id, payload) => api.put(`/api/projects/${id}`, payload),
 
   delete: (id) => api.delete(`/api/projects/${id}`),
+
+  getGitHubDashboard: (id) => api.get(`/api/projects/${id}/github-dashboard`),
 };
 
-// ─── Team Service ─────────────────────────────────────────────
 export const teamService = {
   search: ({ search, status, page = 0, size = 20 } = {}) => {
     const params = new URLSearchParams();
@@ -94,7 +92,6 @@ export const teamService = {
   delete: (id) => api.delete(`/api/teams/${id}`),
 };
 
-// ─── Sprint Service ───────────────────────────────────────────
 export const sprintService = {
   search: ({ search, status, projectId, page = 0, size = 20 } = {}) => {
     const params = new URLSearchParams();
@@ -118,7 +115,6 @@ export const sprintService = {
     api.get(`/api/sprints/stats${projectId ? "?projectId=" + projectId : ""}`),
 };
 
-// ─── Milestone Service ────────────────────────────────────────
 export const milestoneService = {
   search: ({ search, status, projectId, page = 0, size = 20 } = {}) => {
     const params = new URLSearchParams();
@@ -142,7 +138,6 @@ export const milestoneService = {
     api.get(`/api/milestones/stats${projectId ? "?projectId=" + projectId : ""}`),
 };
 
-// ─── Organization Service ────────────────────────────────────
 export const organizationService = {
   search: ({ type, status, page = 0, size = 20 } = {}) => {
     const params = new URLSearchParams();
@@ -170,7 +165,6 @@ export const organizationService = {
   getStats: () => api.get("/api/organizations/stats"),
 };
 
-// ─── Task Service ─────────────────────────────────────────────
 export const taskService = {
   search: ({ projectId, sprintId, status, search, page = 0, size = 100 } = {}) => {
     const params = new URLSearchParams();
@@ -198,7 +192,6 @@ export const taskService = {
   getActivityHistory: (id) => api.get(`/api/tasks/${id}/history`),
 };
 
-// ─── Audit Log Service ─────────────────────────────────────────
 export const auditLogService = {
   search: ({ severity, search, page = 0, size = 20 } = {}) => {
     const params = new URLSearchParams();
@@ -210,7 +203,6 @@ export const auditLogService = {
   }
 };
 
-// ─── SCM Connection Service (Legacy Fallback) ─────────────────
 export const scmConnectionService = {
   search: () => Promise.resolve({ content: [] }),
   getById: () => Promise.resolve(null),
@@ -219,7 +211,67 @@ export const scmConnectionService = {
   delete: () => Promise.resolve(),
 };
 
-// ─── Pipeline Service ──────────────────────────────────────────
+export const githubIntegrationService = {
+  search: ({ organizationId, status, search, page = 0, size = 20 } = {}) => {
+    const params = new URLSearchParams();
+    if (organizationId) params.set("organizationId", organizationId);
+    if (status) params.set("status", status);
+    if (search) params.set("search", search);
+    params.set("page", String(page));
+    params.set("size", String(size));
+    return api.get(`/api/github-integrations?${params.toString()}`);
+  },
+
+  getById: (id) => api.get(`/api/github-integrations/${id}`),
+
+  create: (payload) => api.post("/api/github-integrations", payload),
+
+  update: (id, payload) => api.put(`/api/github-integrations/${id}`, payload),
+
+  delete: (id) => api.delete(`/api/github-integrations/${id}`),
+
+  validate: (id) => api.post(`/api/github-integrations/${id}/validate`),
+
+  getRepositories: (id, { search, page = 0, size = 20 } = {}) => {
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
+    params.set("page", String(page));
+    params.set("size", String(size));
+    return api.get(`/api/github-integrations/${id}/repositories?${params.toString()}`);
+  },
+
+  getRepositoryDetails: (id, owner, repo) =>
+    api.get(`/api/github-integrations/${id}/repositories/${owner}/${repo}`),
+
+  getBranches: (id, owner, repo, { search, page = 0, size = 20 } = {}) => {
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
+    params.set("page", String(page));
+    params.set("size", String(size));
+    return api.get(`/api/github-integrations/${id}/repositories/${owner}/${repo}/branches?${params.toString()}`);
+  },
+
+  getCommits: (id, owner, repo, { page = 0, size = 20 } = {}) =>
+    api.get(`/api/github-integrations/${id}/repositories/${owner}/${repo}/commits?page=${page}&size=${size}`),
+
+  getPullRequests: (id, owner, repo, { state, page = 0, size = 20 } = {}) => {
+    const params = new URLSearchParams();
+    if (state) params.set("state", state);
+    params.set("page", String(page));
+    params.set("size", String(size));
+    return api.get(`/api/github-integrations/${id}/repositories/${owner}/${repo}/pull-requests?${params.toString()}`);
+  },
+
+  getReleases: (id, owner, repo, { page = 0, size = 20 } = {}) =>
+    api.get(`/api/github-integrations/${id}/repositories/${owner}/${repo}/releases?page=${page}&size=${size}`),
+
+  getContributors: (id, owner, repo, { page = 0, size = 20 } = {}) =>
+    api.get(`/api/github-integrations/${id}/repositories/${owner}/${repo}/contributors?page=${page}&size=${size}`),
+
+  getWorkflows: (id, owner, repo, { page = 0, size = 20 } = {}) =>
+    api.get(`/api/github-integrations/${id}/repositories/${owner}/${repo}/workflows?page=${page}&size=${size}`),
+};
+
 export const pipelineService = {
   search: ({ projectId, search, status, page = 0, size = 50 } = {}) => {
     const params = new URLSearchParams();
@@ -241,9 +293,29 @@ export const pipelineService = {
 
   getStats: (projectId) =>
     api.get(`/api/pipelines/stats${projectId ? "?projectId=" + projectId : ""}`),
+
+  getWorkflowRuns: (pipelineId, { branch, status, actor, page = 0, size = 20 } = {}) => {
+    const params = new URLSearchParams();
+    if (branch) params.set("branch", branch);
+    if (status) params.set("status", status);
+    if (actor) params.set("actor", actor);
+    params.set("page", String(page));
+    params.set("size", String(size));
+    return api.get(`/api/pipelines/${pipelineId}/workflow-runs?${params.toString()}`);
+  },
+
+  getMonitoringStats: (pipelineId) => api.get(`/api/pipelines/${pipelineId}/monitoring-stats`),
+
+  getWorkflowRunDetails: (pipelineId, runId) =>
+    api.get(`/api/pipelines/${pipelineId}/workflow-runs/${runId}`),
+
+  getWorkflowRunJobs: (pipelineId, runId) =>
+    api.get(`/api/pipelines/${pipelineId}/workflow-runs/${runId}/jobs`),
+
+  getWorkflowRunLogs: (pipelineId, runId) =>
+    api.get(`/api/pipelines/${pipelineId}/workflow-runs/${runId}/logs`),
 };
 
-// ─── Build Service ────────────────────────────────────────────
 export const buildService = {
   search: ({ pipelineId, status, page = 0, size = 50 } = {}) => {
     const params = new URLSearchParams();
@@ -269,7 +341,6 @@ export const buildService = {
   getStats: () => api.get("/api/builds/stats"),
 };
 
-// ─── Deployment Service ───────────────────────────────────────
 export const deploymentService = {
   search: ({ buildId, pipelineId, environment, status, page = 0, size = 50 } = {}) => {
     const params = new URLSearchParams();
@@ -293,10 +364,15 @@ export const deploymentService = {
   getStats: () => api.get("/api/deployments/stats"),
 };
 
-// ─── Dashboard Service ─────────────────────────────────────────
 export const dashboardService = {
   getStats: (projectId) =>
     api.get(`/api/dashboard/stats${projectId ? "?projectId=" + projectId : ""}`),
 };
 
+export const analyticsService = {
+  getOrganizationDashboard: () => api.get("/api/analytics/organization"),
 
+  getActivityTimeline: (limit = 30) => api.get(`/api/analytics/activity-timeline?limit=${limit}`),
+
+  downloadExportCsvUrl: () => "/api/analytics/export",
+};
