@@ -9,7 +9,7 @@ import { MilestoneTimeline } from "@/components/dashboard/milestone-timeline";
 import { QuickActions } from "@/components/dashboard/quick-actions";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { organizationService, userService, pipelineService, buildService, deploymentService, analyticsService } from "@/services/api-services";
+import { organizationService, userService, pipelineService, buildService, deploymentService, analyticsService, taskService } from "@/services/api-services";
 import { Download, Workflow, GitPullRequest, GitCommit, Tag, BarChart2, TrendingUp, ExternalLink } from "lucide-react";
 import {
   ArrowRight,
@@ -215,153 +215,194 @@ function StackTile({ label, value }) {
       <div className="text-sm font-semibold text-foreground mt-1">{value}</div>
     </div>
   );
-}
+}function DeveloperTasksTable() {
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-function DeveloperTasksTable() {
-  const tasks = [
-    { id: "1", key: "NF-12", title: "Implement JWT validation middleware", status: "IN_PROGRESS", priority: "HIGH", due: "Tomorrow" },
-    { id: "2", key: "NF-18", title: "Write user registration unit tests", status: "TODO", priority: "MEDIUM", due: "In 3 days" },
-    { id: "3", key: "NF-22", title: "Resolve Vite page reload loop", status: "COMPLETED", priority: "CRITICAL", due: "Completed" },
-  ];
+  useEffect(() => {
+    taskService.search({ page: 0, size: 5 })
+      .then((res) => setTasks(res.content || []))
+      .catch(() => setTasks([]))
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
     <div className="rounded-xl border border-border/40 bg-card p-6">
       <h2 className="text-sm font-semibold mb-4">My Assigned Tasks</h2>
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs text-left">
-          <thead>
-            <tr className="border-b border-border/30 text-muted-foreground uppercase pb-2">
-              <th className="py-2 pr-3 text-left">Key</th>
-              <th className="py-2 px-3 text-left">Title</th>
-              <th className="py-2 px-3 text-left">Priority</th>
-              <th className="py-2 px-3 text-left">Status</th>
-              <th className="py-2 pl-3 text-right">Due Date</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border/20">
-            {tasks.map(t => (
-              <tr key={t.id} className="hover:bg-accent/10 transition-colors">
-                <td className="py-3 pr-3 font-mono text-primary font-semibold">{t.key}</td>
-                <td className="py-3 px-3 font-medium text-foreground truncate max-w-[200px]">{t.title}</td>
-                <td className="py-3 px-3">
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                    t.priority === "CRITICAL" ? "bg-destructive/15 text-destructive" :
-                    t.priority === "HIGH" ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground"
-                  }`}>{t.priority}</span>
-                </td>
-                <td className="py-3 px-3 font-medium">{t.status.replace("_", " ")}</td>
-                <td className="py-3 pl-3 text-right text-muted-foreground">{t.due}</td>
+      {loading ? (
+        <div className="py-6 text-center text-xs text-muted-foreground">Loading tasks...</div>
+      ) : tasks.length === 0 ? (
+        <div className="py-6 text-center text-xs text-muted-foreground">No tasks assigned.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs text-left">
+            <thead>
+              <tr className="border-b border-border/30 text-muted-foreground uppercase pb-2">
+                <th className="py-2 pr-3 text-left">Key</th>
+                <th className="py-2 px-3 text-left">Title</th>
+                <th className="py-2 px-3 text-left">Priority</th>
+                <th className="py-2 px-3 text-left">Status</th>
+                <th className="py-2 pl-3 text-right">Due Date</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y divide-border/20">
+              {tasks.map(t => (
+                <tr key={t.id} className="hover:bg-accent/10 transition-colors">
+                  <td className="py-3 pr-3 font-mono text-primary font-semibold">{t.taskKey || t.key || "TASK"}</td>
+                  <td className="py-3 px-3 font-medium text-foreground truncate max-w-[200px]">{t.title}</td>
+                  <td className="py-3 px-3">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                      t.priority === "CRITICAL" ? "bg-destructive/15 text-destructive" :
+                      t.priority === "HIGH" ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground"
+                    }`}>{t.priority}</span>
+                  </td>
+                  <td className="py-3 px-3 font-medium">{t.status?.replace("_", " ") || "TODO"}</td>
+                  <td className="py-3 pl-3 text-right text-muted-foreground">{t.dueDate ? fmtDate(t.dueDate, "d MMM") : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
 
 function DeveloperPipelines() {
-  const pipelines = [
-    { repo: "NeuroForge-Core", branch: "main", commit: "a3f5b72", status: "SUCCESS", time: "2m ago" },
-    { repo: "NeuroForge-Frontend", branch: "feature/auth", commit: "9c8e1a5", status: "RUNNING", time: "Just now" },
-  ];
+  const [pipelines, setPipelines] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    pipelineService.search({ page: 0, size: 5 })
+      .then((res) => setPipelines(res.content || []))
+      .catch(() => setPipelines([]))
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
     <div className="rounded-xl border border-border/40 bg-card p-6">
       <h2 className="text-sm font-semibold mb-4">Active Build Pipelines</h2>
-      <div className="space-y-4">
-        {pipelines.map((p, i) => (
-          <div key={i} className="flex items-center justify-between p-3 border border-border/20 rounded-lg bg-background/40">
-            <div>
-              <div className="font-semibold text-xs text-foreground flex items-center gap-1.5">
-                <span className="font-mono text-muted-foreground font-normal">{p.repo}</span>
-                <span className="text-[10px] px-1 bg-muted rounded font-mono font-normal">{p.branch}</span>
+      {loading ? (
+        <div className="py-6 text-center text-xs text-muted-foreground">Loading pipelines...</div>
+      ) : pipelines.length === 0 ? (
+        <div className="py-6 text-center text-xs text-muted-foreground">No active pipelines found.</div>
+      ) : (
+        <div className="space-y-4">
+          {pipelines.map((p) => (
+            <div key={p.id} className="flex items-center justify-between p-3 border border-border/20 rounded-lg bg-background/40">
+              <div>
+                <div className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                  <span className="font-mono text-muted-foreground font-normal">{p.name || p.repositoryName}</span>
+                  <span className="text-[10px] px-1 bg-muted rounded font-mono font-normal">{p.targetBranch || "main"}</span>
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-1 font-mono">Status: {p.status || "ACTIVE"}</div>
               </div>
-              <div className="text-[10px] text-muted-foreground mt-1 font-mono">Commit: {p.commit} · {p.time}</div>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center gap-1 ${
+                p.status === "ACTIVE" ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"
+              }`}>
+                <span className={`size-1.5 rounded-full ${p.status === "ACTIVE" ? "bg-success" : "bg-muted"}`} />
+                {p.status || "ACTIVE"}
+              </span>
             </div>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center gap-1 ${
-              p.status === "SUCCESS" ? "bg-success/15 text-success" : "bg-primary-soft text-primary animate-pulse"
-            }`}>
-              <span className={`size-1.5 rounded-full ${p.status === "SUCCESS" ? "bg-success" : "bg-primary animate-ping"}`} />
-              {p.status}
-            </span>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 function TesterDefectsTable() {
-  const defects = [
-    { id: "1", key: "BUG-87", title: "API Gateway returns 504 Gateway Timeout during auth peak", severity: "CRITICAL", status: "OPEN" },
-    { id: "2", key: "BUG-92", title: "Password toggle icon not aligned in mobile layout", severity: "LOW", status: "RESOLVED" },
-    { id: "3", key: "BUG-99", title: "Theme toggle resets preference after page refresh", severity: "HIGH", status: "OPEN" },
-  ];
+  const [defects, setDefects] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    taskService.search({ page: 0, size: 5 })
+      .then((res) => {
+        const filtered = (res.content || []).filter(t => t.priority === "CRITICAL" || t.priority === "HIGH" || t.title?.toLowerCase().includes("bug") || t.title?.toLowerCase().includes("defect"));
+        setDefects(filtered.length > 0 ? filtered : (res.content || []).slice(0, 5));
+      })
+      .catch(() => setDefects([]))
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
     <div className="rounded-xl border border-border/40 bg-card p-6">
       <h2 className="text-sm font-semibold mb-4">Defect Backlog</h2>
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs text-left">
-          <thead>
-            <tr className="border-b border-border/30 text-muted-foreground uppercase pb-2">
-              <th className="py-2 pr-3 text-left">ID</th>
-              <th className="py-2 px-3 text-left">Title</th>
-              <th className="py-2 px-3 text-left">Severity</th>
-              <th className="py-2 pl-3 text-right">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border/20">
-            {defects.map(d => (
-              <tr key={d.id} className="hover:bg-accent/10 transition-colors">
-                <td className="py-3 pr-3 font-mono text-destructive font-semibold">{d.key}</td>
-                <td className="py-3 px-3 font-medium text-foreground truncate max-w-[200px]">{d.title}</td>
-                <td className="py-3 px-3">
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                    d.severity === "CRITICAL" ? "bg-destructive/15 text-destructive" :
-                    d.severity === "HIGH" ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground"
-                  }`}>{d.severity}</span>
-                </td>
-                <td className="py-3 pl-3 text-right">
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                    d.status === "OPEN" ? "bg-warning/10 text-warning" : "bg-success/15 text-success"
-                  }`}>{d.status}</span>
-                </td>
+      {loading ? (
+        <div className="py-6 text-center text-xs text-muted-foreground">Loading defects...</div>
+      ) : defects.length === 0 ? (
+        <div className="py-6 text-center text-xs text-muted-foreground">No open defects found.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs text-left">
+            <thead>
+              <tr className="border-b border-border/30 text-muted-foreground uppercase pb-2">
+                <th className="py-2 pr-3 text-left">ID</th>
+                <th className="py-2 px-3 text-left">Title</th>
+                <th className="py-2 px-3 text-left">Severity</th>
+                <th className="py-2 pl-3 text-right">Status</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y divide-border/20">
+              {defects.map(d => (
+                <tr key={d.id} className="hover:bg-accent/10 transition-colors">
+                  <td className="py-3 pr-3 font-mono text-destructive font-semibold">{d.taskKey || d.key || "BUG"}</td>
+                  <td className="py-3 px-3 font-medium text-foreground truncate max-w-[200px]">{d.title}</td>
+                  <td className="py-3 px-3">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                      d.priority === "CRITICAL" ? "bg-destructive/15 text-destructive" :
+                      d.priority === "HIGH" ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground"
+                    }`}>{d.priority}</span>
+                  </td>
+                  <td className="py-3 pl-3 text-right">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                      d.status === "COMPLETED" ? "bg-success/15 text-success" : "bg-warning/10 text-warning"
+                    }`}>{d.status}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
 
 function TesterRunsList() {
-  const suites = [
-    { name: "Regression Suite", passed: 184, failed: 2, total: 190, duration: "12m 4s", progress: 98 },
-    { name: "Sanity Verification", passed: 45, failed: 0, total: 45, duration: "3m ago", progress: 100 },
-  ];
+  const [builds, setBuilds] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    buildService.search({ page: 0, size: 5 })
+      .then((res) => setBuilds(res.content || []))
+      .catch(() => setBuilds([]))
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
     <div className="rounded-xl border border-border/40 bg-card p-6">
       <h2 className="text-sm font-semibold mb-4">Recent Test Executions</h2>
-      <div className="space-y-4">
-        {suites.map((s, i) => (
-          <div key={i} className="space-y-2 p-3 border border-border/20 rounded-lg bg-background/40">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-xs text-foreground">{s.name}</span>
-              <span className="text-[10px] text-muted-foreground">{s.duration}</span>
+      {loading ? (
+        <div className="py-6 text-center text-xs text-muted-foreground">Loading test executions...</div>
+      ) : builds.length === 0 ? (
+        <div className="py-6 text-center text-xs text-muted-foreground">No recent build executions.</div>
+      ) : (
+        <div className="space-y-4">
+          {builds.map((b) => (
+            <div key={b.id} className="space-y-2 p-3 border border-border/20 rounded-lg bg-background/40">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-xs text-foreground">{b.pipelineName || "Build"} #{b.buildNumber}</span>
+                <span className="text-[10px] text-muted-foreground">{b.completedAt ? fmtDate(b.completedAt, "HH:mm") : "In Progress"}</span>
+              </div>
+              <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
+                <span>Commit: {b.commitHash ? b.commitHash.substring(0, 7) : "HEAD"}</span>
+                <span className={b.status === "SUCCESS" ? "text-success font-bold" : "text-destructive font-bold"}>{b.status}</span>
+              </div>
             </div>
-            <div className="flex justify-between text-[10px] text-muted-foreground">
-              <span>{s.passed} passed · {s.failed} failed</span>
-              <span>{s.progress}% complete</span>
-            </div>
-            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-              <div
-                className={`h-full rounded-full ${s.failed > 0 ? "bg-destructive" : "bg-success"}`}
-                style={{ width: `${s.progress}%` }}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -500,6 +541,10 @@ function Dashboard() {
     milestones: 0,
     sprints: 0,
     organizations: 0,
+    tasks: 0,
+    pipelines: 0,
+    builds: 0,
+    deployments: 0,
   });
 
   // State for Lists (Recent view / Approvals)
@@ -546,12 +591,16 @@ function Dashboard() {
         setPendingOrgs(orgsData.filter((o) => o.status === "PENDING_APPROVAL"));
         setPendingUsers(pendingUsersData.filter((u) => u.role === "ORG_ADMIN" || u.role === "admin"));
       } else {
-        const [projRes, userRes, teamRes, milRes, sprRes, pendingUsersData] = await Promise.all([
+        const [projRes, userRes, teamRes, milRes, sprRes, taskRes, pipeRes, buildRes, depRes, pendingUsersData] = await Promise.all([
           api.get("/api/projects?size=100").catch(() => ({ content: [], totalElements: 0 })),
           api.get("/api/users?size=100").catch(() => ({ content: [], totalElements: 0 })),
           api.get("/api/teams?size=100").catch(() => ({ content: [], totalElements: 0 })),
           api.get("/api/milestones?size=100").catch(() => ({ content: [], totalElements: 0 })),
           api.get("/api/sprints?size=100").catch(() => ({ content: [], totalElements: 0 })),
+          api.get("/api/tasks?size=100").catch(() => ({ content: [], totalElements: 0 })),
+          api.get("/api/pipelines?size=100").catch(() => ({ content: [], totalElements: 0 })),
+          api.get("/api/builds?size=100").catch(() => ({ content: [], totalElements: 0 })),
+          api.get("/api/deployments?size=100").catch(() => ({ content: [], totalElements: 0 })),
           userRole === "admin" ? fetchPageOrCatch("/api/users/pending?size=100") : Promise.resolve([]),
         ]);
 
@@ -566,6 +615,10 @@ function Dashboard() {
           milestones: milRes.totalElements || milRes.content?.length || 0,
           sprints: sprRes.totalElements || sprRes.content?.length || 0,
           organizations: 0,
+          tasks: taskRes.totalElements || taskRes.content?.length || 0,
+          pipelines: pipeRes.totalElements || pipeRes.content?.length || 0,
+          builds: buildRes.totalElements || buildRes.content?.length || 0,
+          deployments: depRes.totalElements || depRes.content?.length || 0,
         });
       }
     } catch (err) {
@@ -769,12 +822,11 @@ function Dashboard() {
       case "developer":
         return (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
-              <KpiTile index={0} label="Assigned tasks" value={8} spark={<Sparkline data={[12, 10, 9, 8]} />} />
-              <KpiTile index={1} label="Active repos" value={4} spark={<Sparkline data={[3, 3, 4, 4]} color="var(--color-chart-2)" />} />
-              <KpiTile index={2} label="Build pipelines" value={2} spark={<Sparkline data={[1, 3, 2, 2]} color="var(--color-chart-3)" />} />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <KpiTile index={0} label="Assigned tasks" value={counts.tasks} spark={<Sparkline data={[counts.tasks]} />} />
+              <KpiTile index={1} label="Active projects" value={counts.projects} spark={<Sparkline data={[counts.projects]} color="var(--color-chart-2)" />} />
+              <KpiTile index={2} label="Build pipelines" value={counts.pipelines} spark={<Sparkline data={[counts.pipelines]} color="var(--color-chart-3)" />} />
               <KpiTile index={3} label="Open sprints" value={counts.sprints} spark={<Sparkline data={[counts.sprints]} color="var(--color-chart-4)" />} />
-              <KpiTile index={4} label="Code coverage" value="92.4%" spark={<Sparkline data={[89, 90, 91, 92]} color="var(--color-chart-5)" />} />
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <div className="lg:col-span-2">
@@ -789,12 +841,11 @@ function Dashboard() {
       case "tester":
         return (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
-              <KpiTile index={0} label="Open defects" value={14} spark={<Sparkline data={[18, 16, 15, 14]} />} />
-              <KpiTile index={1} label="Test cases run" value={247} spark={<Sparkline data={[210, 230, 240, 247]} color="var(--color-chart-2)" />} />
-              <KpiTile index={2} label="Passed rate" value="98.2%" spark={<Sparkline data={[97, 98, 98, 98]} color="var(--color-chart-3)" />} />
-              <KpiTile index={3} label="Release status" value="Stable" spark={<Sparkline data={[1, 1, 1, 1]} color="var(--color-chart-4)" />} />
-              <KpiTile index={4} label="Blocked cases" value={3} spark={<Sparkline data={[5, 4, 4, 3]} color="var(--color-chart-5)" />} />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <KpiTile index={0} label="Total Tasks" value={counts.tasks} spark={<Sparkline data={[counts.tasks]} />} />
+              <KpiTile index={1} label="Build Executions" value={counts.builds} spark={<Sparkline data={[counts.builds]} color="var(--color-chart-2)" />} />
+              <KpiTile index={2} label="Tracked Projects" value={counts.projects} spark={<Sparkline data={[counts.projects]} color="var(--color-chart-3)" />} />
+              <KpiTile index={3} label="Open Sprints" value={counts.sprints} spark={<Sparkline data={[counts.sprints]} color="var(--color-chart-4)" />} />
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <div className="lg:col-span-2">
@@ -809,12 +860,11 @@ function Dashboard() {
       case "devops":
         return (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
-              <KpiTile index={0} label="Deployments today" value={6} spark={<Sparkline data={[2, 4, 5, 6]} />} />
-              <KpiTile index={1} label="Pipeline health" value="99.1%" spark={<Sparkline data={[98, 98, 99, 99]} color="var(--color-chart-2)" />} />
-              <KpiTile index={2} label="Avg build time" value="4m 12s" spark={<Sparkline data={[290, 270, 260, 252]} color="var(--color-chart-3)" />} />
-              <KpiTile index={3} label="Infra status" value="Healthy" spark={<Sparkline data={[1, 1, 1, 1]} color="var(--color-chart-4)" />} />
-              <KpiTile index={4} label="Cluster pods" value={48} spark={<Sparkline data={[42, 45, 47, 48]} color="var(--color-chart-5)" />} />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <KpiTile index={0} label="Total Deployments" value={counts.deployments} spark={<Sparkline data={[counts.deployments]} />} />
+              <KpiTile index={1} label="Build Executions" value={counts.builds} spark={<Sparkline data={[counts.builds]} color="var(--color-chart-2)" />} />
+              <KpiTile index={2} label="Build Pipelines" value={counts.pipelines} spark={<Sparkline data={[counts.pipelines]} color="var(--color-chart-3)" />} />
+              <KpiTile index={3} label="Active Projects" value={counts.projects} spark={<Sparkline data={[counts.projects]} color="var(--color-chart-4)" />} />
             </div>
             <div className="grid grid-cols-1 gap-4">
               <DevOpsEnvironments />

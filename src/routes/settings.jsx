@@ -86,12 +86,6 @@ function SettingsPage() {
           <button className="flex items-center gap-2 px-3 py-2 rounded-md font-medium bg-accent text-accent-foreground text-left">
             <User className="size-4" /> Personal Profile
           </button>
-          <button
-            className="flex items-center gap-2 px-3 py-2 rounded-md font-medium text-muted-foreground hover:bg-accent/40 hover:text-foreground text-left disabled:opacity-50"
-            disabled
-          >
-            <KeyRound className="size-4" /> Security & Keys (coming soon)
-          </button>
         </div>
 
         {/* Profile Card */}

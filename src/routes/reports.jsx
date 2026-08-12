@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { analyticsService } from "@/services/api-services";
 
 export const Route = createFileRoute("/reports")({
   head: () => ({
@@ -29,8 +30,9 @@ function ReportsPage() {
 
   const handleExport = (reportName, format) => {
     toast.success(`Exporting ${reportName} in ${format}...`, {
-      description: "Generating requested data, download will begin shortly.",
+      description: "Generating requested report dataset...",
     });
+    window.location.href = analyticsService.downloadExportCsvUrl();
   };
 
   const filteredReports = reports.filter(r => 

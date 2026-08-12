@@ -362,6 +362,86 @@ export const deploymentService = {
   delete: (id) => api.delete(`/api/deployments/${id}`),
 
   getStats: () => api.get("/api/deployments/stats"),
+
+  promoteBlueGreen: (payload) => api.post("/api/deployments/blue-green/promote", payload),
+
+  rollback: (id, payload) => api.post(`/api/deployments/${id}/rollback`, payload || {}),
+};
+
+export const releaseService = {
+  search: ({ projectId, status, environment, search, page = 0, size = 50 } = {}) => {
+    const params = new URLSearchParams();
+    if (projectId) params.set("projectId", projectId);
+    if (status) params.set("status", status);
+    if (environment) params.set("environment", environment);
+    if (search) params.set("search", search);
+    params.set("page", String(page));
+    params.set("size", String(size));
+    return api.get(`/api/releases?${params.toString()}`);
+  },
+
+  getById: (id) => api.get(`/api/releases/${id}`),
+
+  create: (payload) => api.post("/api/releases", payload),
+
+  update: (id, payload) => api.put(`/api/releases/${id}`, payload),
+
+  updateStatus: (id, status, notes) => api.put(`/api/releases/${id}/status`, { status, notes }),
+
+  approve: (id) => api.post(`/api/releases/${id}/approve`),
+
+  deploy: (id, environment = "PRODUCTION") => api.post(`/api/releases/${id}/deploy?environment=${environment}`),
+
+  rollback: (id, reason) => api.post(`/api/releases/${id}/rollback`, { reason }),
+
+  delete: (id) => api.delete(`/api/releases/${id}`),
+};
+
+export const monitoringService = {
+  getSummary: () => api.get("/api/monitoring/summary"),
+
+  getServiceHealth: (environment) =>
+    api.get(`/api/monitoring/services${environment ? "?environment=" + environment : ""}`),
+
+  getMetrics: ({ serviceName, environment } = {}) => {
+    const params = new URLSearchParams();
+    if (serviceName) params.set("serviceName", serviceName);
+    if (environment) params.set("environment", environment);
+    return api.get(`/api/monitoring/metrics?${params.toString()}`);
+  },
+
+  getGrafanaDashboards: () => api.get("/api/monitoring/grafana"),
+
+  getLogs: ({ level, environment, serviceName, search, page = 0, size = 50 } = {}) => {
+    const params = new URLSearchParams();
+    if (level && level !== "ALL") params.set("level", level);
+    if (environment) params.set("environment", environment);
+    if (serviceName) params.set("serviceName", serviceName);
+    if (search) params.set("search", search);
+    params.set("page", String(page));
+    params.set("size", String(size));
+    return api.get(`/api/monitoring/logs?${params.toString()}`);
+  },
+};
+
+export const alertService = {
+  search: ({ status, severity, environment, serviceName, search, page = 0, size = 50 } = {}) => {
+    const params = new URLSearchParams();
+    if (status) params.set("status", status);
+    if (severity) params.set("severity", severity);
+    if (environment) params.set("environment", environment);
+    if (serviceName) params.set("serviceName", serviceName);
+    if (search) params.set("search", search);
+    params.set("page", String(page));
+    params.set("size", String(size));
+    return api.get(`/api/alerts?${params.toString()}`);
+  },
+
+  getById: (id) => api.get(`/api/alerts/${id}`),
+
+  acknowledge: (id, notes) => api.put(`/api/alerts/${id}/acknowledge`, { action: "ACKNOWLEDGE", notes }),
+
+  resolve: (id, notes) => api.put(`/api/alerts/${id}/resolve`, { action: "RESOLVE", notes }),
 };
 
 export const dashboardService = {
@@ -376,3 +456,4 @@ export const analyticsService = {
 
   downloadExportCsvUrl: () => "/api/analytics/export",
 };
+
