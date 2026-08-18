@@ -366,9 +366,8 @@ export const deploymentService = {
 
   getStats: () => api.get("/api/deployments/stats"),
 
-<<<<<<< HEAD
   getLogs: (id) => api.get(`/api/deployments/${id}/logs`),
-=======
+
   promoteBlueGreen: (payload) => api.post("/api/deployments/blue-green/promote", payload),
 
   rollback: (id, payload) => api.post(`/api/deployments/${id}/rollback`, payload || {}),
@@ -448,7 +447,6 @@ export const alertService = {
   acknowledge: (id, notes) => api.put(`/api/alerts/${id}/acknowledge`, { action: "ACKNOWLEDGE", notes }),
 
   resolve: (id, notes) => api.put(`/api/alerts/${id}/resolve`, { action: "RESOLVE", notes }),
->>>>>>> 5cb05e4db177fe2da7ec504c308ee1f829238eec
 };
 
 export const dashboardService = {

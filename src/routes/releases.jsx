@@ -5,7 +5,6 @@ import {
   Search,
   Calendar,
   FileText,
-<<<<<<< HEAD
   Server,
   CheckCircle2,
   XCircle,
@@ -17,45 +16,13 @@ import {
   Download,
   Check,
   Filter
-=======
-  CheckCircle2,
-  XCircle,
-  Loader2,
-  Plus,
-  ShieldCheck,
-  RotateCcw,
-  Play,
-  Layers,
-  Filter,
-  Tag,
-  GitBranch,
->>>>>>> 5cb05e4db177fe2da7ec504c308ee1f829238eec
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-<<<<<<< HEAD
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { deploymentService, buildService, pipelineService } from "@/services/api-services";
-=======
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { releaseService, projectService, pipelineService, buildService } from "@/services/api-services";
->>>>>>> 5cb05e4db177fe2da7ec504c308ee1f829238eec
 import { useSession } from "@/lib/session";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -64,14 +31,13 @@ import { fmtDate } from "@/lib/format";
 export const Route = createFileRoute("/releases")({
   head: () => ({
     meta: [
-      { title: "Release Management · NeuroForge Nexus" },
-      { name: "description", content: "Platform release versioning, approvals, deployments, and rollback tracking." },
+      { title: "Release History · NeuroForge Nexus" },
+      { name: "description", content: "Platform deployment release history, version tags, and changelogs." },
     ],
   }),
   component: ReleasesPage,
 });
 
-<<<<<<< HEAD
 export function ReleasesPage() {
   const { user: currentUser } = useSession();
   const [deployments, setDeployments] = useState([]);
@@ -99,47 +65,10 @@ export function ReleasesPage() {
   const [copiedLogs, setCopiedLogs] = useState(false);
 
   const canRelease = currentUser?.role === "admin" || currentUser?.role === "devops" || currentUser?.role === "super_admin";
-=======
-function ReleasesPage() {
-  const { user: currentUser } = useSession();
-  const [releases, setReleases] = useState([]);
-  const [projects, setProjects] = useState([]);
-  const [pipelines, setPipelines] = useState([]);
-  const [builds, setBuilds] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
->>>>>>> 5cb05e4db177fe2da7ec504c308ee1f829238eec
 
-  // Create Release Dialog
-  const [createOpen, setCreateOpen] = useState(false);
-  const [formLoading, setFormLoading] = useState(false);
-  const [projectId, setProjectId] = useState("");
-  const [version, setVersion] = useState("v1.2.0");
-  const [name, setName] = useState("");
-  const [releaseType, setReleaseType] = useState("MINOR");
-  const [environment, setEnvironment] = useState("PRODUCTION");
-  const [sourceBranch, setSourceBranch] = useState("main");
-  const [sourceTag, setSourceTag] = useState("");
-  const [sourceCommit, setSourceCommit] = useState("");
-  const [pipelineId, setPipelineId] = useState("");
-  const [buildId, setBuildId] = useState("");
-  const [releaseNotes, setReleaseNotes] = useState("");
-
-  // Rollback Dialog
-  const [rollbackOpen, setRollbackOpen] = useState(false);
-  const [selectedRelease, setSelectedRelease] = useState(null);
-  const [rollbackReason, setRollbackReason] = useState("");
-  const [rollbackLoading, setRollbackLoading] = useState(false);
-
-  const canCreate = ["admin", "pm", "devops", "super_admin"].includes(currentUser?.role);
-  const canApprove = ["admin", "pm", "super_admin"].includes(currentUser?.role);
-  const canDeploy = ["admin", "devops", "super_admin"].includes(currentUser?.role);
-
-  const fetchData = async () => {
+  const fetchReleases = async () => {
     setLoading(true);
     try {
-<<<<<<< HEAD
       const [depRes, buildRes, pipRes] = await Promise.all([
         deploymentService.search({ size: 100 }).catch(() => ({ content: [] })),
         buildService.search({ size: 100 }).catch(() => ({ content: [] })),
@@ -148,31 +77,18 @@ function ReleasesPage() {
       setDeployments(depRes.content || []);
       setBuilds(buildRes.content || []);
       setPipelines(pipRes.content || []);
-=======
-      const [relRes, projRes, pipeRes, buildRes] = await Promise.all([
-        releaseService.search({ size: 100 }).catch(() => ({ content: [] })),
-        projectService.search({ size: 100 }).catch(() => ({ content: [] })),
-        pipelineService.search({ size: 100 }).catch(() => ({ content: [] })),
-        buildService.search({ size: 100 }).catch(() => ({ content: [] })),
-      ]);
-      setReleases(relRes.content || []);
-      setProjects(projRes.content || []);
-      setPipelines(pipeRes.content || []);
-      setBuilds(buildRes.content || []);
->>>>>>> 5cb05e4db177fe2da7ec504c308ee1f829238eec
     } catch (err) {
-      console.error("Failed to load releases:", err);
-      toast.error("Failed to load release management data");
+      console.error("Failed to load release history:", err);
+      toast.error("Failed to load release history from deployments");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
+    fetchReleases();
   }, []);
 
-<<<<<<< HEAD
   const handleOpenLogs = async (rel) => {
     setSelectedRelForLogs(rel);
     setLogsModalOpen(true);
@@ -197,18 +113,11 @@ function ReleasesPage() {
     }
     if (!version) {
       toast.error("Release version is required.");
-=======
-  const handleCreateRelease = async (e) => {
-    e.preventDefault();
-    if (!projectId || !version || !name) {
-      toast.error("Project, version, and name are required.");
->>>>>>> 5cb05e4db177fe2da7ec504c308ee1f829238eec
       return;
     }
 
     setFormLoading(true);
     try {
-<<<<<<< HEAD
       await deploymentService.create({
         buildId: buildId || undefined,
         pipelineId: pipelineId || undefined,
@@ -223,71 +132,11 @@ function ReleasesPage() {
       fetchReleases();
     } catch (err) {
       toast.error(err.message || "Failed to publish release");
-=======
-      await releaseService.create({
-        projectId,
-        version,
-        name,
-        releaseType,
-        environment,
-        sourceBranch,
-        sourceTag,
-        sourceCommit,
-        pipelineId: pipelineId || null,
-        buildId: buildId || null,
-        releaseNotes,
-        status: "DRAFT",
-      });
-      toast.success(`Release ${version} created successfully.`);
-      setCreateOpen(false);
-      fetchData();
-    } catch (err) {
-      toast.error(err.message || "Failed to create release");
->>>>>>> 5cb05e4db177fe2da7ec504c308ee1f829238eec
     } finally {
       setFormLoading(false);
     }
   };
 
-<<<<<<< HEAD
-=======
-  const handleApprove = async (relId) => {
-    try {
-      await releaseService.approve(relId);
-      toast.success("Release approved for target deployment.");
-      fetchData();
-    } catch (err) {
-      toast.error(err.message || "Failed to approve release");
-    }
-  };
-
-  const handleDeploy = async (relId, env) => {
-    try {
-      await releaseService.deploy(relId, env);
-      toast.success(`Release deployment initiated to ${env}.`);
-      fetchData();
-    } catch (err) {
-      toast.error(err.message || "Failed to deploy release");
-    }
-  };
-
-  const handleRollback = async (e) => {
-    e.preventDefault();
-    if (!selectedRelease) return;
-    setRollbackLoading(true);
-    try {
-      await releaseService.rollback(selectedRelease.id, rollbackReason);
-      toast.success(`Rollback executed for release ${selectedRelease.version}.`);
-      setRollbackOpen(false);
-      fetchData();
-    } catch (err) {
-      toast.error(err.message || "Rollback operation failed");
-    } finally {
-      setRollbackLoading(false);
-    }
-  };
-
->>>>>>> 5cb05e4db177fe2da7ec504c308ee1f829238eec
   const getEnvBadge = (env) => {
     switch (env) {
       case "PRODUCTION":
@@ -303,24 +152,20 @@ function ReleasesPage() {
 
   const getStatusBadge = (st) => {
     switch (st) {
-      case "DEPLOYED":
-        return "text-success bg-success/10 border-success/30";
-      case "APPROVED":
-        return "text-primary bg-primary/10 border-primary/30";
-      case "IN_PROGRESS":
-        return "text-warning bg-warning/10 border-warning/30";
-      case "ROLLED_BACK":
+      case "SUCCESS":
+        return "text-success bg-success/10";
       case "FAILED":
-        return "text-destructive bg-destructive/10 border-destructive/30";
+        return "text-destructive bg-destructive/10";
+      case "DEPLOYING":
+        return "text-primary bg-primary-soft";
       default:
-        return "text-muted-foreground bg-muted border-border/30";
+        return "text-warning bg-warning/10";
     }
   };
 
-  const filtered = releases.filter((r) => {
+  const filtered = deployments.filter((d) => {
     const term = search.toLowerCase();
     const matchesSearch =
-<<<<<<< HEAD
       (d.version && d.version.toLowerCase().includes(term)) ||
       (d.environment && d.environment.toLowerCase().includes(term)) ||
       (d.releaseNotes && d.releaseNotes.toLowerCase().includes(term)) ||
@@ -329,43 +174,25 @@ function ReleasesPage() {
     const matchesEnv = envFilter === "ALL" || d.environment === envFilter;
 
     return matchesSearch && matchesEnv;
-=======
-      !term ||
-      r.version?.toLowerCase().includes(term) ||
-      r.name?.toLowerCase().includes(term) ||
-      r.releaseNotes?.toLowerCase().includes(term) ||
-      r.projectCode?.toLowerCase().includes(term);
-    const matchesStatus = statusFilter === "ALL" || r.status === statusFilter;
-    return matchesSearch && matchesStatus;
->>>>>>> 5cb05e4db177fe2da7ec504c308ee1f829238eec
   });
 
-  const latestProd = releases.find((r) => r.environment === "PRODUCTION" && r.status === "DEPLOYED");
-  const activeCount = releases.filter((r) => r.status === "DEPLOYED").length;
-  const approvedCount = releases.filter((r) => r.status === "APPROVED").length;
+  const latestProd = deployments.find((d) => d.environment === "PRODUCTION" && d.status === "SUCCESS");
+  const latestStaging = deployments.find((d) => d.environment === "STAGING");
 
   return (
-    <div className="p-6 md:p-8 max-w-[1400px] mx-auto space-y-6">
+    <div className="p-6 md:p-8 max-w-[1200px] mx-auto space-y-6">
       <header className="flex items-end justify-between gap-4 pb-6 border-b hairline">
         <div>
           <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-<<<<<<< HEAD
             Release Management & Version Control
           </div>
           <h1 className="font-display text-3xl mt-1 flex items-center gap-2">
             <Rocket className="size-6 text-primary" /> Release Management
-=======
-            Release Management & Deployment Traceability
-          </div>
-          <h1 className="font-display text-3xl mt-1 flex items-center gap-2">
-            <Rocket className="size-6 text-primary" /> Releases
->>>>>>> 5cb05e4db177fe2da7ec504c308ee1f829238eec
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Cut version releases, approve release gates, deploy to environments, and track rollback availability.
+            Version release history derived directly from target environment deployment records.
           </p>
         </div>
-<<<<<<< HEAD
 
         {canRelease && (
           <Button
@@ -381,44 +208,31 @@ function ReleasesPage() {
             }}
           >
             <Plus className="size-3.5" /> Publish New Release
-=======
-        {canCreate && (
-          <Button size="sm" onClick={() => { setProjectId(projects[0]?.id || ""); setCreateOpen(true); }}>
-            <Plus className="size-3.5 mr-1" /> Cut New Release
->>>>>>> 5cb05e4db177fe2da7ec504c308ee1f829238eec
           </Button>
         )}
       </header>
 
       {/* KPI Stats Panel */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <div className="rounded-xl border hairline bg-card p-4">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Active Production Version</div>
           <div className="text-2xl font-bold mt-1 text-success font-mono">
-            {latestProd ? latestProd.version : "v1.2.0"}
+            {latestProd ? latestProd.version : "N/A"}
           </div>
         </div>
         <div className="rounded-xl border hairline bg-card p-4">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Deployed Releases</div>
-          <div className="text-2xl font-bold mt-1 text-primary font-mono">{activeCount}</div>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Latest Staging Release</div>
+          <div className="text-2xl font-bold mt-1 text-primary font-mono">
+            {latestStaging ? latestStaging.version : "N/A"}
+          </div>
         </div>
         <div className="rounded-xl border hairline bg-card p-4">
-<<<<<<< HEAD
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Releases Recorded</div>
           <div className="text-2xl font-bold mt-1 font-display">{deployments.length} releases</div>
-=======
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Releases Pending Deployment</div>
-          <div className="text-2xl font-bold mt-1 text-warning font-mono">{approvedCount}</div>
-        </div>
-        <div className="rounded-xl border hairline bg-card p-4">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Release Artifacts</div>
-          <div className="text-2xl font-bold mt-1 font-display">{releases.length}</div>
->>>>>>> 5cb05e4db177fe2da7ec504c308ee1f829238eec
         </div>
       </div>
 
       {/* Toolbar */}
-<<<<<<< HEAD
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-2 flex-1 max-w-md">
           <div className="relative flex-1">
@@ -443,81 +257,33 @@ function ReleasesPage() {
               <SelectItem value="DEV">DEV</SelectItem>
             </SelectContent>
           </Select>
-=======
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-          <Input
-            placeholder="Search release version, name, or notes..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 h-9 text-xs"
-          />
->>>>>>> 5cb05e4db177fe2da7ec504c308ee1f829238eec
-        </div>
-        <div className="flex items-center gap-2">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-9 w-[160px] text-xs">
-              <Filter className="size-3 mr-1 text-muted-foreground" />
-              <SelectValue placeholder="Status Filter" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">All Statuses</SelectItem>
-              <SelectItem value="DRAFT">DRAFT</SelectItem>
-              <SelectItem value="APPROVED">APPROVED</SelectItem>
-              <SelectItem value="IN_PROGRESS">IN_PROGRESS</SelectItem>
-              <SelectItem value="DEPLOYED">DEPLOYED</SelectItem>
-              <SelectItem value="ROLLED_BACK">ROLLED_BACK</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
       </div>
 
-      {/* Release Timeline / Cards */}
+      {/* Release Timeline */}
       {loading ? (
         <div className="py-16 text-center text-xs text-muted-foreground flex justify-center items-center gap-2">
-          <Loader2 className="size-5 animate-spin text-primary" /> Loading release management data...
+          <Loader2 className="size-5 animate-spin text-primary" /> Loading release history...
         </div>
       ) : filtered.length === 0 ? (
         <div className="rounded-xl border hairline bg-card p-8 text-center text-xs text-muted-foreground">
-<<<<<<< HEAD
           No release history recorded yet. Publish a release to track platform version deployments.
-=======
-          No releases recorded matching current filters. Cut a new release to start tracking.
->>>>>>> 5cb05e4db177fe2da7ec504c308ee1f829238eec
         </div>
       ) : (
         <div className="space-y-4">
           {filtered.map((rel) => (
             <div key={rel.id} className="rounded-xl border hairline bg-card p-6 space-y-4">
-<<<<<<< HEAD
               <div className="flex items-start justify-between flex-wrap gap-3">
-=======
-              <div className="flex items-start justify-between flex-wrap gap-4">
->>>>>>> 5cb05e4db177fe2da7ec504c308ee1f829238eec
                 <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono text-xl font-bold text-foreground">{rel.version}</span>
-                    <span className="text-sm font-semibold text-foreground">({rel.name})</span>
-                    <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold border uppercase", getEnvBadge(rel.environment))}>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-lg font-bold text-foreground">{rel.version}</span>
+                    <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold border uppercase", getEnvBadge(rel.environment))}>
                       {rel.environment}
                     </span>
-                    <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold border uppercase", getStatusBadge(rel.status))}>
+                    <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase", getStatusBadge(rel.status))}>
                       {rel.status}
                     </span>
-                    {rel.releaseType && (
-                      <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[9px] font-mono bg-accent/40 text-muted-foreground uppercase border border-border/20">
-                        <Tag className="size-3" /> {rel.releaseType}
-                      </span>
-                    )}
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1 flex items-center gap-3 flex-wrap font-mono">
-                    <span>Project: {rel.projectCode || "SDLC"}</span>
-                    <span>Pipeline: {rel.pipelineName || "Default CI"}</span>
-                    {rel.buildNumber && <span>Build #{rel.buildNumber}</span>}
-                    {rel.sourceBranch && <span className="flex items-center gap-1"><GitBranch className="size-3" /> {rel.sourceBranch}</span>}
-                  </div>
-<<<<<<< HEAD
                   <h3 className="text-xs font-mono text-muted-foreground mt-1 flex items-center gap-2">
                     <span>Pipeline: {rel.pipelineName || "CI Pipeline"}</span>
                     <span>· Build #{rel.buildNumber || "-"}</span>
@@ -552,58 +318,17 @@ function ReleasesPage() {
                       }}
                     >
                       <ArrowUpRight className="size-3" /> Promote to Prod
-=======
-                </div>
-
-                {/* Release Gate Actions */}
-                <div className="flex items-center gap-2">
-                  {rel.status === "DRAFT" && canApprove && (
-                    <Button size="sm" variant="outline" className="h-8 text-xs border-primary/30 text-primary" onClick={() => handleApprove(rel.id)}>
-                      <ShieldCheck className="size-3.5 mr-1 text-primary" /> Approve Release
-                    </Button>
-                  )}
-                  {(rel.status === "APPROVED" || rel.status === "DRAFT") && canDeploy && (
-                    <Button size="sm" className="h-8 text-xs" onClick={() => handleDeploy(rel.id, rel.environment)}>
-                      <Play className="size-3.5 mr-1" /> Deploy to {rel.environment}
-                    </Button>
-                  )}
-                  {rel.status === "DEPLOYED" && canDeploy && (
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      className="h-8 text-xs"
-                      onClick={() => { setSelectedRelease(rel); setRollbackReason(""); setRollbackOpen(true); }}
-                    >
-                      <RotateCcw className="size-3.5 mr-1" /> Rollback
->>>>>>> 5cb05e4db177fe2da7ec504c308ee1f829238eec
                     </Button>
                   )}
                 </div>
               </div>
 
-              {rel.description && (
-                <p className="text-xs text-muted-foreground leading-relaxed">{rel.description}</p>
-              )}
-
-              {/* Release Notes */}
               <div className="space-y-2 pt-3 border-t border-border/10">
                 <h4 className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
-                  <FileText className="size-3.5" /> Release Notes & Changelog
+                  <FileText className="size-3.5" /> Release Notes
                 </h4>
                 <div className="text-xs text-foreground bg-background p-3 rounded-lg border hairline whitespace-pre-wrap font-sans leading-relaxed">
-<<<<<<< HEAD
                   {rel.releaseNotes || "No release notes provided for this deployment release."}
-=======
-                  {rel.releaseNotes || "No release notes provided for this version artifact."}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-2 font-mono">
-                <div>Created by: {rel.createdBy || "System"}</div>
-                <div className="flex items-center gap-1">
-                  <Calendar className="size-3.5" /> Created: {fmtDate(rel.createdAt)}
-                  {rel.deployedAt && <span className="ml-2">· Deployed: {fmtDate(rel.deployedAt)}</span>}
->>>>>>> 5cb05e4db177fe2da7ec504c308ee1f829238eec
                 </div>
               </div>
             </div>
@@ -611,7 +336,6 @@ function ReleasesPage() {
         </div>
       )}
 
-<<<<<<< HEAD
       {/* Create / Promote Release Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md bg-card border hairline">
@@ -664,84 +388,13 @@ function ReleasesPage() {
                   ))}
                 </SelectContent>
               </Select>
-=======
-      {/* Cut Release Dialog */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-lg bg-card border hairline">
-          <DialogHeader>
-            <DialogTitle className="font-display text-xl">Cut New Release</DialogTitle>
-          </DialogHeader>
-
-          <form onSubmit={handleCreateRelease} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="project">Associated Project</Label>
-                <Select value={projectId} onValueChange={setProjectId} disabled={formLoading}>
-                  <SelectTrigger className="bg-background">
-                    <SelectValue placeholder="Select project" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name} ({p.code})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="version">Release Version</Label>
-                <Input
-                  id="version"
-                  placeholder="v1.2.0"
-                  value={version}
-                  onChange={(e) => setVersion(e.target.value)}
-                  required
-                  disabled={formLoading}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="name">Release Name / Title</Label>
-              <Input
-                id="name"
-                placeholder="e.g. Summer Enterprise Features Update"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                disabled={formLoading}
-              />
->>>>>>> 5cb05e4db177fe2da7ec504c308ee1f829238eec
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-<<<<<<< HEAD
                 <Label htmlFor="relEnv" className="font-semibold">Target Environment</Label>
                 <Select value={environment} onValueChange={setEnvironment} disabled={formLoading}>
                   <SelectTrigger className="bg-background h-9 text-xs">
-=======
-                <Label>Release Type</Label>
-                <Select value={releaseType} onValueChange={setReleaseType} disabled={formLoading}>
-                  <SelectTrigger className="bg-background">
-                    <SelectValue placeholder="Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="MAJOR">MAJOR</SelectItem>
-                    <SelectItem value="MINOR">MINOR</SelectItem>
-                    <SelectItem value="PATCH">PATCH</SelectItem>
-                    <SelectItem value="HOTFIX">HOTFIX</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>Target Environment</Label>
-                <Select value={environment} onValueChange={setEnvironment} disabled={formLoading}>
-                  <SelectTrigger className="bg-background">
->>>>>>> 5cb05e4db177fe2da7ec504c308ee1f829238eec
                     <SelectValue placeholder="Environment" />
                   </SelectTrigger>
                   <SelectContent>
@@ -752,7 +405,6 @@ function ReleasesPage() {
                   </SelectContent>
                 </Select>
               </div>
-<<<<<<< HEAD
 
               <div className="space-y-1.5">
                 <Label htmlFor="relVersion" className="font-semibold">Release Version Tag *</Label>
@@ -765,46 +417,10 @@ function ReleasesPage() {
                   disabled={formLoading}
                   className="h-9 text-xs font-mono"
                 />
-=======
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Associated Pipeline</Label>
-                <Select value={pipelineId} onValueChange={setPipelineId} disabled={formLoading}>
-                  <SelectTrigger className="bg-background">
-                    <SelectValue placeholder="Select pipeline (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pipelines.map((pl) => (
-                      <SelectItem key={pl.id} value={pl.id}>
-                        {pl.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>Associated Build</Label>
-                <Select value={buildId} onValueChange={setBuildId} disabled={formLoading}>
-                  <SelectTrigger className="bg-background">
-                    <SelectValue placeholder="Select build (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {builds.map((b) => (
-                      <SelectItem key={b.id} value={b.id}>
-                        Build #{b.buildNumber} - {b.status}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
->>>>>>> 5cb05e4db177fe2da7ec504c308ee1f829238eec
               </div>
             </div>
 
             <div className="space-y-1.5">
-<<<<<<< HEAD
               <Label htmlFor="relNotes" className="font-semibold">Release Notes / Changelog</Label>
               <Input
                 id="relNotes"
@@ -813,41 +429,22 @@ function ReleasesPage() {
                 onChange={(e) => setReleaseNotes(e.target.value)}
                 disabled={formLoading}
                 className="h-9 text-xs"
-=======
-              <Label htmlFor="notes">Release Notes & Changelog</Label>
-              <Textarea
-                id="notes"
-                placeholder="Enter release notes, features, and bugfixes..."
-                value={releaseNotes}
-                onChange={(e) => setReleaseNotes(e.target.value)}
-                rows={3}
-                disabled={formLoading}
->>>>>>> 5cb05e4db177fe2da7ec504c308ee1f829238eec
               />
             </div>
 
             <DialogFooter className="pt-4 border-t hairline mt-4">
-<<<<<<< HEAD
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={formLoading}>
                 Cancel
               </Button>
               <Button type="submit" disabled={formLoading} className="gap-2 bg-primary text-primary-foreground">
                 {formLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Rocket className="size-3.5" />}
                 Publish Release
-=======
-              <Button type="button" variant="outline" onClick={() => setCreateOpen(false)} disabled={formLoading}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={formLoading}>
-                {formLoading ? <Loader2 className="size-3.5 animate-spin ml-1" /> : "Cut Release Artifact"}
->>>>>>> 5cb05e4db177fe2da7ec504c308ee1f829238eec
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-<<<<<<< HEAD
       {/* Release Runtime Logs Modal */}
       <Dialog open={logsModalOpen} onOpenChange={setLogsModalOpen}>
         <DialogContent className="max-w-3xl bg-card border hairline overflow-hidden flex flex-col max-h-[85vh]">
@@ -936,43 +533,6 @@ function ReleasesPage() {
               )}
             </div>
           </div>
-=======
-      {/* Rollback Dialog */}
-      <Dialog open={rollbackOpen} onOpenChange={setRollbackOpen}>
-        <DialogContent className="max-w-md bg-card border hairline">
-          <DialogHeader>
-            <DialogTitle className="font-display text-xl text-destructive">Confirm Release Rollback</DialogTitle>
-          </DialogHeader>
-
-          <form onSubmit={handleRollback} className="space-y-4">
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              You are about to initiate an immediate operational rollback for release{" "}
-              <strong className="font-mono text-foreground">{selectedRelease?.version}</strong> on{" "}
-              <strong>{selectedRelease?.environment}</strong>.
-            </p>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="reason">Rollback Reason</Label>
-              <Input
-                id="reason"
-                placeholder="State reason for rollback (e.g. Critical memory spike)..."
-                value={rollbackReason}
-                onChange={(e) => setRollbackReason(e.target.value)}
-                required
-                disabled={rollbackLoading}
-              />
-            </div>
-
-            <DialogFooter className="pt-4 border-t hairline mt-4">
-              <Button type="button" variant="outline" onClick={() => setRollbackOpen(false)} disabled={rollbackLoading}>
-                Cancel
-              </Button>
-              <Button type="submit" variant="destructive" disabled={rollbackLoading}>
-                {rollbackLoading ? <Loader2 className="size-3.5 animate-spin ml-1" /> : "Execute Operational Rollback"}
-              </Button>
-            </DialogFooter>
-          </form>
->>>>>>> 5cb05e4db177fe2da7ec504c308ee1f829238eec
         </DialogContent>
       </Dialog>
     </div>
