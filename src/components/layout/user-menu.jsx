@@ -1,4 +1,4 @@
-import { LogOut, User, ShieldCheck, KeyRound, ChevronDown } from "lucide-react";
+import { LogOut, User, ChevronDown } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,13 +51,7 @@ export function UserMenu() {
         </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => navigate({ to: "/settings" })}>
-          <User className="size-3.5" /> Profile
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => navigate({ to: "/settings" })}>
-          <ShieldCheck className="size-3.5" /> Security
-        </DropdownMenuItem>
-        <DropdownMenuItem>
-          <KeyRound className="size-3.5" /> API keys
+          <User className="size-3.5" /> Settings & Profile
         </DropdownMenuItem>
 
         <DropdownMenuSeparator />

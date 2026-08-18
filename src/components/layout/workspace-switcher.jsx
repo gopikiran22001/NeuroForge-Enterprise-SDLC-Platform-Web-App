@@ -5,7 +5,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 const workspaces = [
@@ -49,8 +48,6 @@ export function WorkspaceSwitcher() {
             {active.id === w.id && <Check className="size-3.5" />}
           </DropdownMenuItem>
         ))}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem>Create workspace</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

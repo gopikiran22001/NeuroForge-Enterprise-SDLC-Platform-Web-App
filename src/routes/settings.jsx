@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Settings, User, KeyRound, Loader2, Check } from "lucide-react";
+import { Settings, User, Loader2, Check } from "lucide-react";
 import { useSession, formatSessionUser, mapFrontendRoleToBackend } from "@/lib/session";
 import { ROLE_LABEL } from "@/lib/permissions";
 import { api } from "@/lib/api";
@@ -85,12 +85,6 @@ function SettingsPage() {
         <div className="flex flex-col gap-1 text-sm">
           <button className="flex items-center gap-2 px-3 py-2 rounded-md font-medium bg-accent text-accent-foreground text-left">
             <User className="size-4" /> Personal Profile
-          </button>
-          <button
-            className="flex items-center gap-2 px-3 py-2 rounded-md font-medium text-muted-foreground hover:bg-accent/40 hover:text-foreground text-left disabled:opacity-50"
-            disabled
-          >
-            <KeyRound className="size-4" /> Security & Keys (coming soon)
           </button>
         </div>
 

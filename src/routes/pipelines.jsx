@@ -29,7 +29,9 @@ import {
   BarChart2,
   Layers,
   ArrowLeft,
-  Check
+  Check,
+  Play,
+  PlayCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -126,6 +128,15 @@ export function PipelinesPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [pipelineToDelete, setPipelineToDelete] = useState(null);
 
+  // Commit History & Trigger State
+  const [commits, setCommits] = useState([]);
+  const [commitsLoading, setCommitsLoading] = useState(false);
+  const [triggerLoadingId, setTriggerLoadingId] = useState(null);
+  const [triggerDialogOpen, setTriggerDialogOpen] = useState(false);
+  const [selectedCommitForTrigger, setSelectedCommitForTrigger] = useState(null);
+  const [customCommitSha, setCustomCommitSha] = useState("");
+  const [customCommitMsg, setCustomCommitMsg] = useState("");
+
   const canManage = currentUser?.role === "admin" || currentUser?.role === "devops" || currentUser?.role === "pm" || currentUser?.role === "super_admin";
 
   const fetchData = async () => {
@@ -160,8 +171,11 @@ export function PipelinesPage() {
     setSelectedRun(null);
     setJobs([]);
     setLogsContent("");
+    setCommits([]);
     setActiveTab("overview");
     setStatsLoading(true);
+
+    fetchCommits(pip);
 
     try {
       const statsRes = await pipelineService.getMonitoringStats(pip.id);
@@ -174,12 +188,69 @@ export function PipelinesPage() {
     }
   };
 
+  const fetchCommits = async (pip) => {
+    if (!pip) return;
+    const projObj = projects.find((p) => p.id === pip.projectId);
+    if (!projObj || !projObj.githubIntegrationId || !projObj.repositoryOwner || !projObj.repositoryName) return;
+
+    setCommitsLoading(true);
+    try {
+      const res = await githubIntegrationService.getCommits(
+        projObj.githubIntegrationId,
+        projObj.repositoryOwner,
+        projObj.repositoryName,
+        { page: 0, size: 50 }
+      );
+      setCommits(res.content || []);
+    } catch (err) {
+      console.error("Failed to load repository commits:", err);
+    } finally {
+      setCommitsLoading(false);
+    }
+  };
+
+  const handleTriggerPipelineForCommit = async (commitObj) => {
+    if (!selectedPipeline) return;
+    const commitSha = commitObj?.sha || commitObj?.id || customCommitSha || "";
+    const commitMsg = commitObj?.commit?.message || commitObj?.message || customCommitMsg || "Manual workflow execution trigger";
+
+    setTriggerLoadingId(commitSha || "manual");
+    try {
+      await pipelineService.trigger(selectedPipeline.id, {
+        commitHash: commitSha,
+        commitMessage: commitMsg,
+        branch: selectedPipeline.branch,
+      });
+
+      toast.success(
+        `Pipeline triggered for commit ${commitSha ? commitSha.substring(0, 7) : selectedPipeline.branch}!`,
+        { description: `Triggered execution build on branch ${selectedPipeline.branch}.` }
+      );
+
+      setTriggerDialogOpen(false);
+      setSelectedCommitForTrigger(null);
+      setCustomCommitSha("");
+      setCustomCommitMsg("");
+
+      // Refresh monitoring stats & workflow runs
+      fetchWorkflowRuns(selectedPipeline.id);
+      openPipelineMonitoring(selectedPipeline);
+      setActiveTab("runs");
+    } catch (err) {
+      toast.error(err.message || "Failed to trigger pipeline execution");
+    } finally {
+      setTriggerLoadingId(null);
+    }
+  };
+
   // Lazy-load Tab Data
   useEffect(() => {
     if (!selectedPipeline) return;
 
     if (activeTab === "runs" && workflowRuns.length === 0 && !runsLoading) {
       fetchWorkflowRuns(selectedPipeline.id);
+    } else if (activeTab === "commits" && commits.length === 0 && !commitsLoading) {
+      fetchCommits(selectedPipeline);
     } else if (activeTab === "jobs" && selectedRun && jobs.length === 0 && !jobsLoading) {
       fetchJobs(selectedPipeline.id, selectedRun.id);
     } else if (activeTab === "logs" && selectedRun && !logsContent && !logsLoading) {
@@ -518,15 +589,24 @@ export function PipelinesPage() {
               </div>
             </div>
 
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs gap-1.5"
-              onClick={() => openPipelineMonitoring(selectedPipeline)}
-              disabled={statsLoading}
-            >
-              <RefreshCw className={cn("size-3.5", statsLoading && "animate-spin")} /> Refresh Monitoring
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1.5"
+                onClick={() => openPipelineMonitoring(selectedPipeline)}
+                disabled={statsLoading}
+              >
+                <RefreshCw className={cn("size-3.5", statsLoading && "animate-spin")} /> Refresh
+              </Button>
+              <Button
+                size="sm"
+                className="h-8 text-xs gap-1.5 bg-primary text-primary-foreground"
+                onClick={() => setTriggerDialogOpen(true)}
+              >
+                <Play className="size-3.5" /> Trigger Pipeline
+              </Button>
+            </div>
           </div>
 
           {/* Quick Metrics Header Bar */}
@@ -576,6 +656,9 @@ export function PipelinesPage() {
             <TabsList className="bg-card border hairline p-1 h-10 w-full justify-start overflow-x-auto gap-1">
               <TabsTrigger value="overview" className="text-xs gap-1.5">
                 <Activity className="size-3.5" /> Overview
+              </TabsTrigger>
+              <TabsTrigger value="commits" className="text-xs gap-1.5">
+                <GitCommit className="size-3.5" /> Commit History ({commits.length})
               </TabsTrigger>
               <TabsTrigger value="runs" className="text-xs gap-1.5">
                 <Workflow className="size-3.5" /> Workflow Runs ({workflowRuns.length})
@@ -659,6 +742,109 @@ export function PipelinesPage() {
                   </div>
                 </div>
               </div>
+            </TabsContent>
+
+            {/* TAB: COMMIT HISTORY & TRIGGER */}
+            <TabsContent value="commits" className="space-y-4">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <h3 className="font-semibold text-xs text-foreground uppercase tracking-wider flex items-center gap-2">
+                    <GitCommit className="size-4 text-primary" /> Repository Commit History
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Browse complete commit log for branch <span className="font-mono text-foreground font-semibold">{selectedPipeline.branch}</span> and trigger workflow execution for any specific commit.
+                  </p>
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs gap-1.5"
+                  onClick={() => fetchCommits(selectedPipeline)}
+                  disabled={commitsLoading}
+                >
+                  <RefreshCw className={cn("size-3.5", commitsLoading && "animate-spin")} /> Refresh Commits
+                </Button>
+              </div>
+
+              {commitsLoading ? (
+                <div className="py-12 text-center text-xs text-muted-foreground flex justify-center items-center gap-2">
+                  <Loader2 className="size-4 animate-spin text-primary" /> Fetching commit history from GitHub REST API...
+                </div>
+              ) : commits.length === 0 ? (
+                <div className="rounded-xl border hairline bg-card p-8 text-center text-xs text-muted-foreground">
+                  No repository commit history retrieved.
+                </div>
+              ) : (
+                <div className="rounded-xl border hairline bg-card overflow-hidden">
+                  <table className="w-full text-xs text-left border-collapse">
+                    <thead>
+                      <tr className="border-b hairline text-muted-foreground bg-muted/20 uppercase text-[10px] tracking-wider">
+                        <th className="py-3 px-4 font-semibold">Commit SHA</th>
+                        <th className="py-3 px-4 font-semibold">Message</th>
+                        <th className="py-3 px-4 font-semibold">Author</th>
+                        <th className="py-3 px-4 font-semibold">Date</th>
+                        <th className="py-3 px-4 font-semibold text-right">Trigger Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border hairline">
+                      {commits.map((c) => {
+                        const sha = c.sha || c.id || "";
+                        const shortSha = sha.substring(0, 7) || "HEAD";
+                        const msg = c.commit?.message || c.message || "Commit update";
+                        const authorName = c.commit?.author?.name || c.author?.login || c.author || "Contributor";
+                        const authorAvatar = c.author?.avatar_url;
+                        const dateStr = c.commit?.author?.date || c.date;
+
+                        const isTriggering = triggerLoadingId === sha;
+
+                        return (
+                          <tr key={sha} className="hover:bg-muted/30 transition-colors">
+                            <td className="py-3.5 px-4 font-mono font-semibold">
+                              <span className="bg-muted px-2 py-0.5 rounded text-foreground inline-flex items-center gap-1">
+                                <GitCommit className="size-3 text-primary" />
+                                {shortSha}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 max-w-[360px]">
+                              <p className="font-semibold text-foreground truncate">{msg}</p>
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <div className="flex items-center gap-1.5">
+                                {authorAvatar ? (
+                                  <img src={authorAvatar} alt="" className="size-4 rounded-full" />
+                                ) : (
+                                  <User className="size-3.5 text-muted-foreground" />
+                                )}
+                                <span className="font-medium text-foreground">{authorName}</span>
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4 text-muted-foreground font-mono">
+                              {dateStr ? fmtDate(dateStr, "d MMM yyyy · HH:mm") : "—"}
+                            </td>
+                            <td className="py-3.5 px-4 text-right">
+                              <Button
+                                size="sm"
+                                variant="default"
+                                className="h-7 text-xs px-2.5 gap-1.5 bg-primary text-primary-foreground"
+                                onClick={() => handleTriggerPipelineForCommit(c)}
+                                disabled={isTriggering}
+                              >
+                                {isTriggering ? (
+                                  <Loader2 className="size-3 animate-spin" />
+                                ) : (
+                                  <Play className="size-3" />
+                                )}
+                                Trigger Flow
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </TabsContent>
 
             {/* TAB 2: WORKFLOW RUNS */}
@@ -1186,6 +1372,97 @@ export function PipelinesPage() {
         loading={formLoading}
         onConfirm={handleDeleteConfirm}
       />
+
+      {/* Trigger Pipeline Dialog */}
+      <Dialog open={triggerDialogOpen} onOpenChange={setTriggerDialogOpen}>
+        <DialogContent className="max-w-md bg-card border hairline">
+          <DialogHeader>
+            <DialogTitle className="font-display text-xl flex items-center gap-2">
+              <PlayCircle className="size-5 text-primary" />
+              Trigger Pipeline Execution
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Select a commit from repository history or enter a commit SHA to execute pipeline "{selectedPipeline?.name}".
+            </DialogDescription>
+          </DialogHeader>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleTriggerPipelineForCommit(selectedCommitForTrigger || { sha: customCommitSha, message: customCommitMsg });
+            }}
+            className="space-y-4 py-2 text-xs"
+          >
+            <div className="space-y-1.5">
+              <Label className="font-semibold">Select Commit from History</Label>
+              <Select
+                value={selectedCommitForTrigger?.sha || ""}
+                onValueChange={(shaVal) => {
+                  const found = commits.find((c) => (c.sha || c.id) === shaVal);
+                  setSelectedCommitForTrigger(found || null);
+                  if (found) {
+                    setCustomCommitSha(found.sha || "");
+                    setCustomCommitMsg(found.commit?.message || "");
+                  }
+                }}
+              >
+                <SelectTrigger className="bg-background h-9 text-xs">
+                  <SelectValue placeholder="-- Pick a commit from history --" />
+                </SelectTrigger>
+                <SelectContent>
+                  {commits.map((c) => {
+                    const sha = c.sha || c.id;
+                    const short = sha ? sha.substring(0, 7) : "";
+                    const msg = c.commit?.message || c.message || "";
+                    return (
+                      <SelectItem key={sha} value={sha}>
+                        [{short}] {msg.length > 35 ? msg.substring(0, 35) + "..." : msg}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="customSha" className="font-semibold">Commit SHA / Ref</Label>
+              <Input
+                id="customSha"
+                placeholder="e.g. 7f8a9b0 or HEAD"
+                value={customCommitSha}
+                onChange={(e) => setCustomCommitSha(e.target.value)}
+                className="h-9 text-xs font-mono"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="customMsg" className="font-semibold">Execution Description / Message</Label>
+              <Input
+                id="customMsg"
+                placeholder="Manual pipeline execution run"
+                value={customCommitMsg}
+                onChange={(e) => setCustomCommitMsg(e.target.value)}
+                className="h-9 text-xs"
+              />
+            </div>
+
+            <DialogFooter className="pt-4 border-t hairline mt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setTriggerDialogOpen(false)}
+                disabled={Boolean(triggerLoadingId)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={Boolean(triggerLoadingId)} className="gap-2 bg-primary text-primary-foreground">
+                {triggerLoadingId ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
+                Run Pipeline
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

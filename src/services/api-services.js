@@ -314,6 +314,9 @@ export const pipelineService = {
 
   getWorkflowRunLogs: (pipelineId, runId) =>
     api.get(`/api/pipelines/${pipelineId}/workflow-runs/${runId}/logs`),
+
+  trigger: (pipelineId, { commitHash, commitMessage, branch } = {}) =>
+    api.post(`/api/pipelines/${pipelineId}/trigger`, { commitHash, commitMessage, branch }),
 };
 
 export const buildService = {
@@ -362,6 +365,8 @@ export const deploymentService = {
   delete: (id) => api.delete(`/api/deployments/${id}`),
 
   getStats: () => api.get("/api/deployments/stats"),
+
+  getLogs: (id) => api.get(`/api/deployments/${id}/logs`),
 };
 
 export const dashboardService = {

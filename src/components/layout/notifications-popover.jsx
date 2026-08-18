@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Bell } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ const BASE = new Date("2026-07-03T09:00:00Z").getTime();
 function iso(offsetMin) {
   return new Date(BASE + offsetMin * 6e4).toISOString();
 }
-const NOTIFICATIONS = [
+const INITIAL_NOTIFICATIONS = [
   { id: "n1", title: "Build failed", body: "Atlas Payments #4419 failed on stage", at: iso(-12), unread: true, kind: "danger" },
   { id: "n2", title: "Release approved", body: "FinCore Nexus 2.3-rc.4 approved by Priya", at: iso(-45), unread: true, kind: "success" },
   { id: "n3", title: "New comment on risk", body: "Marcus mentioned you on 'iOS 18 blocker'", at: iso(-120), unread: true, kind: "info" },
@@ -23,16 +24,23 @@ const KIND_COLOR = {
   success: "bg-success",
   danger: "bg-destructive",
 };
+
 export function NotificationsPopover() {
-  const unread = NOTIFICATIONS.filter((n) => n.unread).length;
+  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
+  const unreadCount = notifications.filter((n) => n.unread).length;
+
+  const handleMarkAllRead = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
+  };
+
   return (
     <Popover>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon" aria-label="Notifications" className="relative size-8">
           <Bell className="size-4" />
-          {unread > 0 && (
+          {unreadCount > 0 && (
             <span className="absolute top-1 right-1 grid min-w-[16px] h-[16px] place-items-center rounded-full bg-primary text-[9px] font-semibold text-primary-foreground px-1">
-              {unread}
+              {unreadCount}
             </span>
           )}
         </Button>
@@ -40,12 +48,17 @@ export function NotificationsPopover() {
       <PopoverContent align="end" className="w-96 p-0">
         <div className="flex items-center justify-between border-b hairline px-3 py-2">
           <div className="text-sm font-medium">Notifications</div>
-          <button className="text-[11px] text-muted-foreground hover:text-foreground">
-            Mark all read
-          </button>
+          {unreadCount > 0 && (
+            <button
+              onClick={handleMarkAllRead}
+              className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Mark all read
+            </button>
+          )}
         </div>
         <ul className="max-h-96 overflow-auto divide-y divide-[var(--color-hairline)]">
-          {NOTIFICATIONS.map((n) => (
+          {notifications.map((n) => (
             <li key={n.id} className="flex gap-3 px-3 py-2.5 hover:bg-accent/40">
               <span className={cn("mt-1.5 size-1.5 rounded-full shrink-0", KIND_COLOR[n.kind])} />
               <div className="min-w-0 flex-1">
@@ -61,11 +74,6 @@ export function NotificationsPopover() {
             </li>
           ))}
         </ul>
-        <div className="border-t hairline px-3 py-2 text-center">
-          <button className="text-[12px] text-muted-foreground hover:text-foreground">
-            View all
-          </button>
-        </div>
       </PopoverContent>
     </Popover>
   );
